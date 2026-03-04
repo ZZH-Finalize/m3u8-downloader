@@ -60,6 +60,13 @@ def create_parser() -> "argparse.ArgumentParser":
         help="输出文件目录 (默认：output)",
     )
     parser.add_argument(
+        "--max-rounds",
+        type=int,
+        default=5,
+        metavar="N",
+        help="最大下载轮次 (默认：5)",
+    )
+    parser.add_argument(
         "--debug",
         action="store_true",
         help="启用调试模式，输出详细日志",
@@ -103,6 +110,7 @@ def parse_arguments() -> AppConfig:
         threads=args.jobs,
         temp_dir=temp_dir,
         output_dir=args.output_dir,
+        max_download_rounds=args.max_rounds,
         keep_cache=args.keep_cache,
     )
 
@@ -115,6 +123,7 @@ def print_banner(config: AppConfig) -> None:
     logger.info(f"临时目录：{config.temp_dir}")
     logger.info(f"输出目录：{config.output_dir}")
     logger.info(f"输出文件：{config.output_file}")
+    logger.info(f"最大下载轮次：{config.max_download_rounds}")
     logger.info(f"保留缓存：{config.keep_cache}")
     logger.info("=" * 40)
 

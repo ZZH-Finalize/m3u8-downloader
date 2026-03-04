@@ -6,11 +6,14 @@
 """
 
 import hashlib
+import json
 import shutil
+from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
 from logger import get_logger
+from models import MetaData
 
 logger = get_logger("cache_manager")
 
@@ -28,6 +31,7 @@ class CacheManager:
     # m3u8 缓存文件命名
     MASTER_M3U8_FILENAME = "master.m3u8"  # 主 m3u8 列表
     RESOLUTION_M3U8_PATTERN = "{}p.m3u8"  # 分辨率 m3u8 文件命名模板
+    METADATA_FILENAME = "metadata.json"  # 元数据文件名
     
     def __init__(self, temp_dir: str, url: str, keep_cache: bool = False):
         """
@@ -240,18 +244,18 @@ class CacheManager:
     def clear_cache(self) -> bool:
         """
         清理缓存目录
-        
+
         Returns:
             是否清理成功
         """
         if self.keep_cache:
             logger.info(f"保留缓存：{self.cache_dir}")
             return True
-        
+
         if not self.cache_dir.exists():
             logger.debug("缓存目录不存在，无需清理")
             return True
-        
+
         try:
             shutil.rmtree(self.cache_dir)
             logger.info(f"缓存已清理：{self.cache_dir}")
@@ -259,6 +263,78 @@ class CacheManager:
         except Exception as e:
             logger.error(f"清理缓存失败：{e}")
             return False
+
+    def save_metadata(self, metadata: MetaData) -> Path:
+        """
+        保存元数据到缓存目录
+
+        Args:
+            metadata: 元数据对象
+
+        Returns:
+            保存的文件路径
+        """
+        self.init_cache()
+        metadata_path = self.cache_dir / self.METADATA_FILENAME
+        with open(metadata_path, "w", encoding="utf-8") as f:
+            json.dump(metadata.to_dict(), f, indent=2, ensure_ascii=False)
+        logger.debug(f"元数据已保存：{metadata_path}")
+        return metadata_path
+
+    def update_metadata_downloaded_mask(self) -> Optional[MetaData]:
+        """
+        更新元数据中的 downloaded_mask，根据实际缓存文件状态
+        
+        Returns:
+            更新后的元数据对象，如果元数据不存在则返回 None
+        """
+        metadata = self.load_metadata()
+        if not metadata:
+            return None
+        
+        # 根据实际文件更新 mask
+        new_mask = 0
+        for i, filename in enumerate(metadata.filenames):
+            if self.segment_exists(filename):
+                new_mask |= (1 << i)
+        
+        metadata.downloaded_mask = new_mask
+        
+        # 保存更新后的元数据
+        self.save_metadata(metadata)
+        logger.debug(f"元数据 downloaded_mask 已更新：{bin(new_mask)}")
+        return metadata
+
+    def load_metadata(self) -> Optional[MetaData]:
+        """
+        从缓存目录加载元数据
+
+        Returns:
+            元数据对象，如果不存在则返回 None
+        """
+        metadata_path = self.cache_dir / self.METADATA_FILENAME
+        if not metadata_path.exists():
+            return None
+
+        try:
+            with open(metadata_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            metadata = MetaData.from_dict(data)
+            logger.debug(f"元数据已从缓存加载：{metadata_path}")
+            return metadata
+        except Exception as e:
+            logger.warning(f"加载元数据失败：{e}")
+            return None
+
+    def metadata_exists(self) -> bool:
+        """
+        检查元数据文件是否存在于缓存中
+
+        Returns:
+            是否存在
+        """
+        metadata_path = self.cache_dir / self.METADATA_FILENAME
+        return metadata_path.exists()
     
     def get_cache_info(self) -> dict:
         """
