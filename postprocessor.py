@@ -83,25 +83,26 @@ class MediaPostprocessor:
             return False
     
     def _create_segment_list(
-        self, 
+        self,
         segment_paths: list[Path]
     ) -> Path:
         """
         创建 ffmpeg 所需的文件列表
-        
+
         Args:
             segment_paths: 分片路径列表
-            
+
         Returns:
             临时列表文件路径
         """
         temp_list_file = segment_paths[0].parent / "segments_list.txt"
-        
+
         with open(temp_list_file, "w", encoding="utf-8") as f:
             for path in segment_paths:
-                # 使用正斜杠路径，ffmpeg 在 Windows 上也能处理
-                f.write(f"file '{str(path).replace(chr(92), '/')}'\n")
-        
+                # 使用绝对路径，确保 ffmpeg 能正确找到文件
+                abs_path = path.resolve()
+                f.write(f"file '{abs_path.as_posix()}'\n")
+
         return temp_list_file
     
     def _run_ffmpeg(self, list_file: Path) -> bool:
