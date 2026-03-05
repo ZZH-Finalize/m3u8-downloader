@@ -241,15 +241,17 @@ class CacheManager:
         
         return m3u8_files
     
-    def clear_cache(self) -> bool:
+    def clear_segments(self) -> bool:
         """
-        清理缓存目录
+        清理已下载的分片文件，保留元数据和 m3u8 文件
+
+        根据元数据中记录的文件列表删除分片，在合并完成后调用
 
         Returns:
             是否清理成功
         """
         if self.keep_cache:
-            logger.info(f"保留缓存：{self.cache_dir}")
+            logger.info(f"保留缓存文件：{self.cache_dir}")
             return True
 
         if not self.cache_dir.exists():
@@ -257,8 +259,43 @@ class CacheManager:
             return True
 
         try:
+            # 从元数据获取分片文件列表
+            metadata = self.load_metadata()
+            if not metadata:
+                logger.warning("元数据不存在，无法清理分片文件")
+                return False
+
+            # 根据元数据中的文件列表删除分片
+            deleted_count = 0
+            for filename in metadata.filenames:
+                segment_path = self.cache_dir / filename
+                if segment_path.exists():
+                    segment_path.unlink()
+                    deleted_count += 1
+
+            logger.info(f"已清理 {deleted_count} 个分片文件，保留元数据和 m3u8 文件：{self.cache_dir}")
+            return True
+        except Exception as e:
+            logger.error(f"清理分片文件失败：{e}")
+            return False
+
+    def clear_cache(self) -> bool:
+        """
+        删除整个缓存目录（包括分片、m3u8 文件和元数据）
+
+        此函数不会被自动调用，需手动调用
+        不受 keep_cache 标志影响，强制删除
+
+        Returns:
+            是否清理成功
+        """
+        if not self.cache_dir.exists():
+            logger.debug("缓存目录不存在，无需清理")
+            return True
+
+        try:
             shutil.rmtree(self.cache_dir)
-            logger.info(f"缓存已清理：{self.cache_dir}")
+            logger.info(f"整个缓存目录已删除：{self.cache_dir}")
             return True
         except Exception as e:
             logger.error(f"清理缓存失败：{e}")

@@ -192,9 +192,9 @@ def run_merge(config: AppConfig, cache_manager: CacheManager) -> None:
         logger.warning(f"合并失败：{result.error}")
         logger.info("分片仍保留在临时目录中")
         sys.exit(1)
-    
-    # 合并成功后清理缓存
-    cache_manager.clear_cache()
+
+    # 合并成功后清理分片文件（保留元数据和 m3u8 文件）
+    cache_manager.clear_segments()
 
 
 def main() -> None:
