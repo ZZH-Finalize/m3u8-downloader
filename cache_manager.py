@@ -184,23 +184,26 @@ class CacheManager:
     def save_segment(self, filename: str, content: bytes) -> Path:
         """
         保存分片文件
-        
+
         Args:
             filename: 分片文件名
             content: 分片内容
-            
+
         Returns:
             保存的文件路径
         """
         self.init_cache()
         segment_path = self.cache_dir / filename
-        
+
+        # 确保父目录存在（如果 filename 包含子目录）
+        segment_path.parent.mkdir(parents=True, exist_ok=True)
+
         # 先写入临时文件，再重命名，确保原子性
         temp_path = segment_path.with_suffix(segment_path.suffix + ".tmp")
         with open(temp_path, "wb") as f:
             f.write(content)
         temp_path.rename(segment_path)
-        
+
         logger.debug(f"分片已保存：{segment_path}")
         return segment_path
     

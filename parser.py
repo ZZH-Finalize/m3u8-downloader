@@ -32,9 +32,12 @@ class M3u8Parser:
         self.cache_manager = cache_manager
         self.timeout = config.timeout
 
-    def parse(self) -> ParseResult:
+    def parse(self, force_refresh: bool = False) -> ParseResult:
         """
         解析 m3u8 文件
+
+        Args:
+            force_refresh: 是否强制刷新，忽略元数据缓存
 
         Returns:
             ParseResult: 解析结果
@@ -42,27 +45,27 @@ class M3u8Parser:
         url = self.config.url
         logger.info(f"正在解析：{url}")
 
-        # 首先检查是否有元数据缓存
-        if self.cache_manager.metadata_exists():
+        # 首先检查是否有元数据缓存（除非强制刷新）
+        if not force_refresh and self.cache_manager.metadata_exists():
             logger.info("检测到元数据缓存，尝试从缓存加载")
             metadata = self.cache_manager.load_metadata()
             if metadata and metadata.url == url:
                 logger.info(f"元数据匹配，使用缓存的解析结果（共 {len(metadata.filenames)} 个分片）")
-                
+
                 # 更新 downloaded_mask（根据实际文件状态）
                 metadata = self.cache_manager.update_metadata_downloaded_mask()
-                
+
                 # 从元数据重建 SegmentInfo 列表
                 segments = self._rebuild_segments_from_metadata(metadata)
-                
+
                 # 保存元数据到配置
                 self.config.metadata = metadata
                 # 保存 m3u8 源文件内容到配置（空字符串，因为不需要）
                 self.config.m3u8_content = ""
-                
+
                 downloaded_count = bin(metadata.downloaded_mask).count("1")
                 logger.info(f"已下载 {downloaded_count}/{len(metadata.filenames)} 个分片")
-                
+
                 return ParseResult(
                     segments=segments,
                     base_url=metadata.base_url,
@@ -71,8 +74,8 @@ class M3u8Parser:
             else:
                 logger.info("元数据 URL 不匹配，将重新解析")
 
-        # 检查缓存中是否有主 m3u8 文件
-        if self.cache_manager.master_m3u8_exists():
+        # 检查缓存中是否有主 m3u8 文件（除非强制刷新）
+        if not force_refresh and self.cache_manager.master_m3u8_exists():
             logger.info("检测到主 m3u8 缓存，从缓存加载")
             content = self.cache_manager.load_master_m3u8()
         else:
@@ -114,8 +117,8 @@ class M3u8Parser:
 
                 sub_url = best_playlist.absolute_uri
 
-                # 检查缓存中是否有该分辨率的 m3u8 文件
-                if self.cache_manager.resolution_m3u8_exists(best_resolution):
+                # 检查缓存中是否有该分辨率的 m3u8 文件（除非强制刷新）
+                if not force_refresh and self.cache_manager.resolution_m3u8_exists(best_resolution):
                     logger.info(f"检测到分辨率 {best_resolution} 的 m3u8 缓存，从缓存加载")
                     sub_content = self.cache_manager.load_resolution_m3u8(best_resolution)
                 else:
@@ -301,11 +304,11 @@ class M3u8Parser:
             index: 分片索引
 
         Returns:
-            文件名
+            文件名（可能包含相对路径）
         """
         parsed = urlparse(url_path)
-        name = Path(parsed.path).name
+        path = parsed.path.lstrip("/")
 
-        if name:
-            return name
+        if path:
+            return path
         return f"segment_{index:06d}.ts"

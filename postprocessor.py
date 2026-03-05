@@ -108,10 +108,10 @@ class MediaPostprocessor:
     def _run_ffmpeg(self, list_file: Path) -> bool:
         """
         执行 ffmpeg 命令
-        
+
         Args:
             list_file: 分片列表文件路径
-            
+
         Returns:
             是否成功
         """
@@ -125,16 +125,19 @@ class MediaPostprocessor:
             "-bsf:a", "aac_adtstoasc",  # 音频比特流过滤器
             self.output_file,
         ]
-        
+
         try:
             result = subprocess.run(
-                cmd, 
-                check=True, 
-                capture_output=True, 
-                text=True
+                cmd,
+                check=True,
+                capture_output=True,
+                # 不指定 text，使用 bytes 避免编码问题
+                # Windows 上 GBK 编码无法处理 ffmpeg 输出中的特殊字符
             )
-            logger.debug(f"ffmpeg 输出：{result.stderr}")
+            logger.debug(f"ffmpeg 执行完成")
             return True
         except subprocess.CalledProcessError as e:
-            logger.error(f"ffmpeg 执行失败：{e.stderr}")
+            # 使用 errors='replace' 解码错误输出
+            stderr = e.stderr.decode('utf-8', errors='replace') if e.stderr else ""
+            logger.error(f"ffmpeg 执行失败：{stderr}")
             return False

@@ -164,16 +164,17 @@ def print_banner(config: AppConfig) -> None:
     logger.info("=" * 40)
 
 
-def run_parse(config: AppConfig, cache_manager: CacheManager) -> None:
+def run_parse(config: AppConfig, cache_manager: CacheManager, force_refresh: bool = False) -> None:
     """
     执行解析阶段
 
     Args:
         config: 应用配置（会被修改）
         cache_manager: 缓存管理器
+        force_refresh: 是否强制刷新，忽略元数据缓存
     """
     parser = M3u8Parser(config, cache_manager)
-    result = parser.parse()
+    result = parser.parse(force_refresh=force_refresh)
 
     if not result.success:
         logger.error(result.error)
@@ -418,9 +419,9 @@ def cmd_cache_update(args: argparse.Namespace) -> None:
     else:
         logger.info("缓存不存在，将创建新缓存")
 
-    # 执行解析（会重新下载 m3u8 并生成/更新元数据）
+    # 执行解析（强制刷新，重新下载 m3u8 并生成/更新元数据）
     try:
-        run_parse(config, cache_manager)
+        run_parse(config, cache_manager, force_refresh=True)
         logger.info("缓存元数据更新完成")
     except SystemExit:
         # run_parse 中调用了 sys.exit(1)，需要捕获
