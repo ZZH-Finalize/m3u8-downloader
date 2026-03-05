@@ -43,7 +43,9 @@ def create_parser() -> argparse.ArgumentParser:
   %(prog)s download https://example.com/video.m3u8
   %(prog)s download https://example.com/video.m3u8 -j 8
   %(prog)s download https://example.com/video.m3u8 --output video.mp4
-  %(prog)s download https://example.com/video.m3u8 --api-host 192.168.1.100 --api-port 5000
+  %(prog)s cache list
+  %(prog)s cache rm abc123
+  %(prog)s cache clear
         """,
     )
 
@@ -123,6 +125,7 @@ cache 示例:
   %(prog)s list                          # 列出所有缓存
   %(prog)s rm <id>                       # 删除指定 id 的缓存
   %(prog)s clear                         # 清空所有缓存
+  %(prog)s update <url>                  # 更新指定 URL 的缓存元数据
         """,
     )
 
@@ -130,6 +133,18 @@ cache 示例:
 
     # cache list
     cache_list_parser = cache_subparsers.add_parser("list", help="列出所有缓存")
+    cache_list_parser.add_argument(
+        "--api-host",
+        type=str,
+        default=DEFAULT_API_HOST,
+        help=f"后端 API 主机地址 (默认：{DEFAULT_API_HOST})",
+    )
+    cache_list_parser.add_argument(
+        "--api-port",
+        type=int,
+        default=DEFAULT_API_PORT,
+        help=f"后端 API 端口 (默认：{DEFAULT_API_PORT})",
+    )
 
     # cache rm
     cache_rm_parser = cache_subparsers.add_parser("rm", help="删除指定 id 的缓存")
@@ -137,9 +152,52 @@ cache 示例:
         "id",
         help="要删除缓存的 id (哈希值)",
     )
+    cache_rm_parser.add_argument(
+        "--api-host",
+        type=str,
+        default=DEFAULT_API_HOST,
+        help=f"后端 API 主机地址 (默认：{DEFAULT_API_HOST})",
+    )
+    cache_rm_parser.add_argument(
+        "--api-port",
+        type=int,
+        default=DEFAULT_API_PORT,
+        help=f"后端 API 端口 (默认：{DEFAULT_API_PORT})",
+    )
 
     # cache clear
     cache_clear_parser = cache_subparsers.add_parser("clear", help="清空所有缓存")
+    cache_clear_parser.add_argument(
+        "--api-host",
+        type=str,
+        default=DEFAULT_API_HOST,
+        help=f"后端 API 主机地址 (默认：{DEFAULT_API_HOST})",
+    )
+    cache_clear_parser.add_argument(
+        "--api-port",
+        type=int,
+        default=DEFAULT_API_PORT,
+        help=f"后端 API 端口 (默认：{DEFAULT_API_PORT})",
+    )
+
+    # cache update
+    cache_update_parser = cache_subparsers.add_parser("update", help="更新缓存元数据")
+    cache_update_parser.add_argument(
+        "url",
+        help="要更新的 m3u8 URL",
+    )
+    cache_update_parser.add_argument(
+        "--api-host",
+        type=str,
+        default=DEFAULT_API_HOST,
+        help=f"后端 API 主机地址 (默认：{DEFAULT_API_HOST})",
+    )
+    cache_update_parser.add_argument(
+        "--api-port",
+        type=int,
+        default=DEFAULT_API_PORT,
+        help=f"后端 API 端口 (默认：{DEFAULT_API_PORT})",
+    )
 
     return parser
 
@@ -219,35 +277,145 @@ def cmd_download(args: argparse.Namespace) -> None:
         sys.exit(1)
 
 
+def cmd_cache_list(args: argparse.Namespace) -> None:
+    """执行 cache list 命令"""
+    api_base_url = get_api_base_url(args.api_host, args.api_port)
+    
+    try:
+        response = requests.get(f"{api_base_url}/api/cache/list", timeout=30)
+        result = response.json()
+        
+        if not result.get("success"):
+            print(f"获取缓存列表失败：{result.get('error')}", file=sys.stderr)
+            return
+        
+        caches = result.get("caches", [])
+        
+        if not caches:
+            print("暂无缓存")
+            return
+        
+        print(f"缓存目录：temp_segments")
+        print("-" * 70)
+        
+        for cache in caches:
+            print(f"\nURL: {cache['url']}")
+            print(f"ID: {cache['id']}")
+            print(f"  分片数量：{cache['segment_count']}")
+            print(f"  m3u8 文件数：{cache['m3u8_count']}")
+            print(f"  总大小：{cache['total_size_mb']:.2f} MB")
+            if cache.get('created_at'):
+                print(f"  创建时间：{cache['created_at']}")
+        
+        print("-" * 70)
+        print(f"共 {len(caches)} 个缓存")
+        
+    except requests.exceptions.RequestException as e:
+        print(f"错误：请求失败 - {e}", file=sys.stderr)
+        sys.exit(1)
+
+
+def cmd_cache_rm(args: argparse.Namespace) -> None:
+    """执行 cache rm 命令"""
+    api_base_url = get_api_base_url(args.api_host, args.api_port)
+    
+    try:
+        response = requests.delete(
+            f"{api_base_url}/api/cache/{args.id}",
+            timeout=30
+        )
+        result = response.json()
+        
+        if result.get("success"):
+            print(f"缓存已删除：{args.id}")
+        else:
+            print(f"删除失败：{result.get('error')}", file=sys.stderr)
+            sys.exit(1)
+            
+    except requests.exceptions.RequestException as e:
+        print(f"错误：请求失败 - {e}", file=sys.stderr)
+        sys.exit(1)
+
+
+def cmd_cache_clear(args: argparse.Namespace) -> None:
+    """执行 cache clear 命令"""
+    api_base_url = get_api_base_url(args.api_host, args.api_port)
+    
+    try:
+        response = requests.post(
+            f"{api_base_url}/api/cache/clear",
+            timeout=30
+        )
+        result = response.json()
+        
+        if result.get("success"):
+            print(f"{result.get('message')}")
+        else:
+            print(f"清空失败：{result.get('error')}", file=sys.stderr)
+            sys.exit(1)
+            
+    except requests.exceptions.RequestException as e:
+        print(f"错误：请求失败 - {e}", file=sys.stderr)
+        sys.exit(1)
+
+
+def cmd_cache_update(args: argparse.Namespace) -> None:
+    """执行 cache update 命令"""
+    api_base_url = get_api_base_url(args.api_host, args.api_port)
+    
+    print(f"正在更新缓存元数据：{args.url}")
+    
+    try:
+        response = requests.post(
+            f"{api_base_url}/api/cache/update",
+            json={"url": args.url},
+            timeout=300  # 5 分钟超时
+        )
+        result = response.json()
+        
+        if result.get("success"):
+            print(f"缓存元数据更新完成，共 {result.get('segment_count')} 个分片")
+        else:
+            print(f"更新失败：{result.get('error')}", file=sys.stderr)
+            sys.exit(1)
+            
+    except requests.exceptions.Timeout:
+        print(f"错误：请求超时", file=sys.stderr)
+        sys.exit(1)
+    except requests.exceptions.RequestException as e:
+        print(f"错误：请求失败 - {e}", file=sys.stderr)
+        sys.exit(1)
+
+
 def cmd_cache(args: argparse.Namespace) -> None:
     """执行 cache 命令"""
     if not args.cache_action:
         # 没有指定子命令，显示帮助
-        print("用法：m3u8-downloader cache <list|rm|clear>")
+        print("用法：m3u8-downloader cache <list|rm|clear|update>")
         print()
         print("子命令:")
         print("  list   列出所有缓存")
         print("  rm     删除指定 id 的缓存")
         print("  clear  清空所有缓存")
+        print("  update 更新缓存元数据")
         print()
         print("使用 'm3u8-downloader cache <subcommand> --help' 获取更多信息")
         sys.exit(1)
     
     # 检查 API 服务是否可用
-    api_host = DEFAULT_API_HOST
-    api_port = DEFAULT_API_PORT
-    
-    if not check_api_available(api_host, api_port):
-        print(f"错误：无法连接到后端 API 服务 ({api_host}:{api_port})", file=sys.stderr)
+    if not check_api_available(args.api_host, args.api_port):
+        print(f"错误：无法连接到后端 API 服务 ({args.api_host}:{args.api_port})", file=sys.stderr)
         print(f"请确保后端服务正在运行", file=sys.stderr)
         sys.exit(1)
     
     if args.cache_action == "list":
-        print("缓存管理功能待实现")
+        cmd_cache_list(args)
     elif args.cache_action == "rm":
-        print(f"删除缓存功能待实现：{args.id}")
+        cmd_cache_rm(args)
     elif args.cache_action == "clear":
-        print("清空缓存功能待实现")
+        cmd_cache_clear(args)
+    elif args.cache_action == "update":
+        cmd_cache_update(args)
     else:
         print(f"未知的缓存操作：{args.cache_action}", file=sys.stderr)
         sys.exit(1)

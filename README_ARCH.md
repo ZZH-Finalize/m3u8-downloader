@@ -2,6 +2,8 @@
 
 本项目已将原始的 m3u8 下载器重构为前后端分离架构。
 
+> **完整 API 文档**: 详见 [API.md](API.md)
+
 ## 项目结构
 
 ```
@@ -40,9 +42,24 @@ python start_server.py
 后端服务默认监听 `127.0.0.1:5000`
 
 可选参数：
-- `--host`: 监听地址 (默认：127.0.0.1)
+- `--host`: 监听地址 IP (默认：127.0.0.1)
 - `--port`: 监听端口 (默认：5000)
-- `--debug`: 启用 Flask 调试模式
+- `--default-threads`: 默认下载线程数，当前端请求未提供时采用 (默认：8)
+- `--log-level`: 日志级别 DEBUG|INFO|WARNING|ERROR|CRITICAL (默认：INFO)
+- `--log-dir`: 日志目录 (默认：logs)
+- `--debug`: 启用 Flask 调试模式（等同于 --log-level DEBUG）
+
+示例：
+```bash
+# 监听所有地址，端口 8080
+python start_server.py --host 0.0.0.0 --port 8080
+
+# 设置默认 16 线程，DEBUG 日志
+python start_server.py --default-threads 16 --log-level DEBUG
+
+# 自定义日志目录
+python start_server.py --log-dir /var/log/m3u8-downloader
+```
 
 ### 3. 使用前端 CLI 下载视频
 
@@ -65,38 +82,50 @@ python start_cli.py download https://example.com/video.m3u8 --output my_video.mp
 python start_cli.py download https://example.com/video.m3u8 --api-host 192.168.1.100 --api-port 5000
 ```
 
+### 4. 缓存管理
+
+```bash
+# 列出所有缓存
+python start_cli.py cache list
+
+# 删除指定缓存
+python start_cli.py cache rm <cache_id>
+
+# 清空所有缓存
+python start_cli.py cache clear
+
+# 更新缓存元数据
+python start_cli.py cache update <m3u8_url>
+```
+
 ## API 文档
 
-### 健康检查
-```
-GET /health
-```
+完整的 API 文档请查看 [API.md](API.md)。
 
-### 下载视频
-```
+### 快速参考
+
+#### 下载视频
+```http
 POST /api/download
 ```
 
-请求体：
-```json
-{
-    "url": "https://example.com/video.m3u8",
-    "threads": 4,
-    "output": "video.mp4",
-    "max_rounds": 5,
-    "keep_cache": false,
-    "debug": false
-}
+#### 获取服务器配置
+```http
+GET /api/config
 ```
 
-响应：
-```json
-{
-    "success": true,
-    "output_path": "output/abc123/video.mp4",
-    "segments_downloaded": 100,
-    "total_segments": 100
-}
+#### 缓存管理
+```http
+GET    /api/cache/list       # 列出所有缓存
+GET    /api/cache/<id>       # 获取缓存详情
+DELETE /api/cache/<id>       # 删除指定缓存
+POST   /api/cache/clear      # 清空所有缓存
+POST   /api/cache/update     # 更新缓存元数据
+```
+
+#### 健康检查
+```http
+GET /health
 ```
 
 ## 架构说明
