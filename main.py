@@ -6,6 +6,7 @@ m3u8 视频下载工具 - 主程序
 """
 
 import sys
+import argparse
 from pathlib import Path
 
 from models import AppConfig
@@ -18,101 +19,136 @@ from logger import get_logger, LOG_FILE
 logger = get_logger("main")
 
 
-def create_parser() -> "argparse.ArgumentParser":
+def create_parser() -> argparse.ArgumentParser:
     """创建命令行参数解析器"""
-    import argparse
-    
     parser = argparse.ArgumentParser(
         description="m3u8 视频下载工具",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 示例:
+  %(prog)s download https://example.com/video.m3u8
+  %(prog)s download https://example.com/video.m3u8 -j 8
+  %(prog)s download https://example.com/video.m3u8 --output-dir ./downloads -j 4
+  %(prog)s cache list
+  %(prog)s cache rm https://example.com/video.m3u8
+  %(prog)s cache clear
+        """,
+    )
+
+    subparsers = parser.add_subparsers(dest="command", help="可用命令")
+
+    # ===== download 子命令 =====
+    download_parser = subparsers.add_parser(
+        "download",
+        help="下载 m3u8 视频",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+download 示例:
   %(prog)s https://example.com/video.m3u8
   %(prog)s https://example.com/video.m3u8 -j 8
-  %(prog)s https://example.com/video.m3u8 --output-dir ./downloads -j 4
+  %(prog)s https://example.com/video.m3u8 --output video.mp4
   %(prog)s https://example.com/video.m3u8 --keep-cache
         """,
     )
 
-    parser.add_argument(
+    download_parser.add_argument(
         "url",
         help="m3u8 文件的 URL",
     )
-    parser.add_argument(
+    download_parser.add_argument(
         "-j", "--jobs",
         type=int,
         default=4,
         metavar="N",
         help="下载线程数 (默认：4)",
     )
-    parser.add_argument(
-        "--temp-dir",
+    download_parser.add_argument(
+        "--output",
         type=str,
         default=None,
-        metavar="PATH",
-        help="分片临时存储目录 (默认：当前目录下的 temp_segments)",
+        metavar="NAME",
+        help="输出文件名称 (默认：video.mp4)",
     )
-    parser.add_argument(
-        "--output-dir",
-        type=str,
-        default="output",
-        metavar="PATH",
-        help="输出文件目录 (默认：output)",
-    )
-    parser.add_argument(
+    download_parser.add_argument(
         "--max-rounds",
         type=int,
         default=5,
         metavar="N",
         help="最大下载轮次 (默认：5)",
     )
-    parser.add_argument(
+    download_parser.add_argument(
         "--debug",
         action="store_true",
         help="启用调试模式，输出详细日志",
     )
-    parser.add_argument(
+    download_parser.add_argument(
         "--keep-cache",
         action="store_true",
         help="保留缓存文件（m3u8 和分片），不自动清理",
     )
 
+    # ===== cache 子命令 =====
+    cache_parser = subparsers.add_parser(
+        "cache",
+        help="管理缓存",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+cache 示例:
+  %(prog)s list                          # 列出所有缓存
+  %(prog)s rm <id>                       # 删除指定 id 的缓存
+  %(prog)s clear                         # 清空所有缓存
+  %(prog)s update <url>                  # 更新指定 URL 的缓存元数据
+        """,
+    )
+
+    cache_subparsers = cache_parser.add_subparsers(dest="cache_action", help="缓存操作")
+
+    # cache list
+    cache_list_parser = cache_subparsers.add_parser("list", help="列出所有缓存")
+
+    # cache rm
+    cache_rm_parser = cache_subparsers.add_parser("rm", help="删除指定 id 的缓存")
+    cache_rm_parser.add_argument(
+        "id",
+        help="要删除缓存的 id (哈希值)",
+    )
+
+    # cache clear
+    cache_clear_parser = cache_subparsers.add_parser("clear", help="清空所有缓存")
+
+    # cache update
+    cache_update_parser = cache_subparsers.add_parser("update", help="更新缓存元数据")
+    cache_update_parser.add_argument(
+        "url",
+        help="要更新的 m3u8 URL",
+    )
+
     return parser
 
 
-def parse_arguments() -> AppConfig:
+def parse_arguments() -> tuple[str, argparse.Namespace]:
     """
-    解析命令行参数并生成配置
-    
+    解析命令行参数
+
     Returns:
-        AppConfig: 应用配置
+        (command, args): 命令名称和参数对象
     """
     parser = create_parser()
     args = parser.parse_args()
-    
-    # 验证参数
-    if args.jobs < 1:
-        logger.error("线程数必须大于 0")
+
+    if not args.command:
+        parser.print_help()
         sys.exit(1)
 
-    # 设置临时目录
-    temp_dir = args.temp_dir or "temp_segments"
+    return args.command, args
 
-    # 启用调试模式
-    if args.debug:
-        get_logger("main", debug=True)
-        get_logger("parser", debug=True)
-        get_logger("downloader", debug=True)
-        get_logger("postprocessor", debug=True)
 
-    return AppConfig(
-        url=args.url,
-        threads=args.jobs,
-        temp_dir=temp_dir,
-        output_dir=args.output_dir,
-        max_download_rounds=args.max_rounds,
-        keep_cache=args.keep_cache,
-    )
+def setup_debug_logging() -> None:
+    """启用调试模式"""
+    get_logger("main", debug=True)
+    get_logger("parser", debug=True)
+    get_logger("downloader", debug=True)
+    get_logger("postprocessor", debug=True)
 
 
 def print_banner(config: AppConfig) -> None:
@@ -197,37 +233,240 @@ def run_merge(config: AppConfig, cache_manager: CacheManager) -> None:
     cache_manager.clear_segments()
 
 
-def main() -> None:
-    """主函数"""
-    # 1. 解析参数
-    config = parse_arguments()
+def cmd_download(args: argparse.Namespace) -> None:
+    """执行 download 命令"""
+    # 验证参数
+    if args.jobs < 1:
+        logger.error("线程数必须大于 0")
+        sys.exit(1)
 
-    # 2. 创建缓存管理器
+    # 固定默认值
+    temp_dir = "temp_segments"
+    output_dir = "output"
+
+    # 启用调试模式
+    if args.debug:
+        setup_debug_logging()
+
+    # 创建配置
+    config = AppConfig(
+        url=args.url,
+        threads=args.jobs,
+        temp_dir=temp_dir,
+        output_dir=output_dir,
+        max_download_rounds=args.max_rounds,
+        keep_cache=args.keep_cache,
+    )
+
+    # 创建缓存管理器
     cache_manager = CacheManager(
         temp_dir=config.temp_dir,
         url=config.url,
         keep_cache=config.keep_cache
     )
 
-    # 3. 设置输出文件路径 (output_dir/[hash]/video.mp4)
-    output_dir = Path(config.output_dir) / cache_manager.cache_path.name
-    output_dir.mkdir(parents=True, exist_ok=True)
-    config.output_file = str(output_dir / "video.mp4")
+    # 设置输出文件路径 (output_dir/[hash]/[output_name])
+    output_name = args.output or "video.mp4"
+    output_path = Path(config.output_dir) / cache_manager.cache_path.name / output_name
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    config.output_file = str(output_path)
 
-    # 4. 打印启动信息
+    # 打印启动信息
     logger.info("m3u8 下载工具启动")
     print_banner(config)
 
-    # 5. 解析 m3u8
+    # 解析 m3u8
     run_parse(config, cache_manager)
 
-    # 6. 下载分片
+    # 下载分片
     run_download(config, cache_manager)
 
-    # 7. 合并分片
+    # 合并分片
     run_merge(config, cache_manager)
 
     logger.info("全部完成！日志文件：" + str(LOG_FILE))
+
+
+def cmd_cache_list(args: argparse.Namespace) -> None:
+    """执行 cache list 命令"""
+    temp_dir = Path("temp_segments")
+
+    if not temp_dir.exists():
+        print("暂无缓存")
+        return
+
+    cache_dirs = [d for d in temp_dir.iterdir() if d.is_dir()]
+
+    if not cache_dirs:
+        print("暂无缓存")
+        return
+
+    print(f"缓存目录：{temp_dir}")
+    print("-" * 60)
+
+    for cache_dir in cache_dirs:
+        cache_manager = CacheManager(
+            temp_dir=str(temp_dir),
+            url="",  # 不需要 URL，只用于获取目录结构
+            keep_cache=True
+        )
+        # 手动设置 cache_dir
+        cache_manager.cache_dir = cache_dir
+
+        cache_info = cache_manager.get_cache_info()
+        size_mb = cache_info["total_size"] / (1024 * 1024)
+
+        # 从元数据获取 URL
+        metadata = cache_manager.load_metadata()
+        url = metadata.url if metadata else "未知"
+
+        print(f"\nURL: {url}")
+        print(f"ID: {cache_dir.name}")
+        print(f"  分片数量：{cache_info['segment_count']}")
+        print(f"  m3u8 文件数：{cache_info['m3u8_count']}")
+        print(f"  总大小：{size_mb:.2f} MB")
+
+    print("-" * 60)
+    print(f"共 {len(cache_dirs)} 个缓存")
+
+
+def cmd_cache_rm(args: argparse.Namespace) -> None:
+    """执行 cache rm 命令"""
+    temp_dir = Path("temp_segments")
+
+    if not temp_dir.exists():
+        print(f"缓存不存在：{args.id}")
+        return
+
+    cache_dir = temp_dir / args.id
+
+    if not cache_dir.exists():
+        print(f"缓存不存在：{args.id}")
+        return
+
+    cache_manager = CacheManager(
+        temp_dir=str(temp_dir),
+        url="",
+        keep_cache=False
+    )
+    cache_manager.cache_dir = cache_dir
+
+    success = cache_manager.clear_cache()
+    if success:
+        print(f"缓存已删除：{args.id}")
+    else:
+        print(f"删除失败：{args.id}")
+
+
+def cmd_cache_clear(args: argparse.Namespace) -> None:
+    """执行 cache clear 命令"""
+    temp_dir = Path("temp_segments")
+
+    if not temp_dir.exists():
+        print("暂无缓存")
+        return
+
+    cache_dirs = [d for d in temp_dir.iterdir() if d.is_dir()]
+
+    if not cache_dirs:
+        print("暂无缓存")
+        return
+
+    deleted_count = 0
+    for cache_dir in cache_dirs:
+        cache_manager = CacheManager(
+            temp_dir=str(temp_dir),
+            url="",
+            keep_cache=False
+        )
+        cache_manager.cache_dir = cache_dir
+        if cache_manager.clear_cache():
+            deleted_count += 1
+
+    print(f"已删除 {deleted_count}/{len(cache_dirs)} 个缓存")
+
+
+def cmd_cache_update(args: argparse.Namespace) -> None:
+    """执行 cache update 命令"""
+    temp_dir = "temp_segments"
+
+    # 创建缓存管理器
+    cache_manager = CacheManager(
+        temp_dir=temp_dir,
+        url=args.url,
+        keep_cache=True
+    )
+
+    # 初始化缓存目录
+    cache_manager.init_cache()
+
+    # 创建配置用于解析
+    config = AppConfig(
+        url=args.url,
+        threads=1,
+        temp_dir=temp_dir,
+        output_dir="output",
+        max_download_rounds=1,
+        keep_cache=True,
+    )
+
+    logger.info(f"正在更新缓存元数据：{args.url}")
+
+    # 检查是否有现有缓存
+    if cache_manager.metadata_exists():
+        logger.info("检测到现有缓存，将重新下载 m3u8 文件并更新元数据")
+    else:
+        logger.info("缓存不存在，将创建新缓存")
+
+    # 执行解析（会重新下载 m3u8 并生成/更新元数据）
+    try:
+        run_parse(config, cache_manager)
+        logger.info("缓存元数据更新完成")
+    except SystemExit:
+        # run_parse 中调用了 sys.exit(1)，需要捕获
+        logger.error("更新缓存元数据失败")
+        sys.exit(1)
+
+
+def cmd_cache(args: argparse.Namespace) -> None:
+    """执行 cache 命令"""
+    if not args.cache_action:
+        # 没有指定子命令，显示帮助
+        print("用法：m3u8-downloader cache <list|rm|clear|update>")
+        print()
+        print("子命令:")
+        print("  list   列出所有缓存")
+        print("  rm     删除指定 id 的缓存")
+        print("  clear  清空所有缓存")
+        print("  update 更新缓存元数据")
+        print()
+        print("使用 'm3u8-downloader cache <subcommand> --help' 获取更多信息")
+        sys.exit(1)
+
+    if args.cache_action == "list":
+        cmd_cache_list(args)
+    elif args.cache_action == "rm":
+        cmd_cache_rm(args)
+    elif args.cache_action == "clear":
+        cmd_cache_clear(args)
+    elif args.cache_action == "update":
+        cmd_cache_update(args)
+    else:
+        print(f"未知的缓存操作：{args.cache_action}")
+        sys.exit(1)
+
+
+def main() -> None:
+    """主函数"""
+    command, args = parse_arguments()
+
+    if command == "download":
+        cmd_download(args)
+    elif command == "cache":
+        cmd_cache(args)
+    else:
+        print(f"未知命令：{command}")
+        sys.exit(1)
 
 
 if __name__ == "__main__":
