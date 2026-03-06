@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-后处理模块
-负责调用 ffmpeg 合并分片并转换为 mp4
+异步后处理模块
+使用 asyncio 异步调用 ffmpeg 合并分片
 """
 
-import subprocess
+import asyncio
 from pathlib import Path
 
 from models import AppConfig, MergeResult
@@ -15,15 +15,15 @@ logger = get_logger("postprocessor")
 
 
 class MediaPostprocessor:
-    """媒体后处理器"""
+    """异步媒体后处理器"""
 
     def __init__(self, config: AppConfig):
         self.config = config
         self.output_file = config.output_file
 
-    def merge(self, segment_paths: list[Path]) -> MergeResult:
+    async def merge(self, segment_paths: list[Path]) -> MergeResult:
         """
-        合并分片并转换为 mp4
+        异步合并分片并转换为 mp4
 
         Args:
             segment_paths: 分片本地路径列表
@@ -39,7 +39,8 @@ class MediaPostprocessor:
             )
 
         # 检查 ffmpeg
-        if not self._check_ffmpeg():
+        ffmpeg_available = await self._check_ffmpeg()
+        if not ffmpeg_available:
             logger.error("未找到 ffmpeg，请确保已安装并添加到 PATH")
             return MergeResult(
                 success=False,
@@ -52,7 +53,7 @@ class MediaPostprocessor:
         # 执行 ffmpeg 合并
         logger.info(f"正在合并 {len(segment_paths)} 个分片并转换为 mp4...")
 
-        success = self._run_ffmpeg(temp_list_file)
+        success = await self._run_ffmpeg(temp_list_file)
 
         # 清理临时文件
         temp_list_file.unlink(missing_ok=True)
@@ -70,31 +71,24 @@ class MediaPostprocessor:
                 error="ffmpeg 执行失败"
             )
 
-    def _check_ffmpeg(self) -> bool:
-        """检查 ffmpeg 是否可用"""
+    async def _check_ffmpeg(self) -> bool:
+        """异步检查 ffmpeg 是否可用"""
         try:
-            subprocess.run(
-                ["ffmpeg", "-version"],
-                capture_output=True,
-                check=True,
+            process = await asyncio.create_subprocess_exec(
+                "ffmpeg", "-version",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
             )
-            return True
-        except (subprocess.CalledProcessError, FileNotFoundError):
+            await process.communicate()
+            return process.returncode == 0
+        except (FileNotFoundError, Exception):
             return False
 
     def _create_segment_list(
         self,
         segment_paths: list[Path]
     ) -> Path:
-        """
-        创建 ffmpeg 所需的文件列表
-
-        Args:
-            segment_paths: 分片路径列表
-
-        Returns:
-            临时列表文件路径
-        """
+        """创建 ffmpeg 所需的文件列表"""
         temp_list_file = segment_paths[0].parent / "segments_list.txt"
 
         with open(temp_list_file, "w", encoding="utf-8") as f:
@@ -105,16 +99,8 @@ class MediaPostprocessor:
 
         return temp_list_file
 
-    def _run_ffmpeg(self, list_file: Path) -> bool:
-        """
-        执行 ffmpeg 命令
-
-        Args:
-            list_file: 分片列表文件路径
-
-        Returns:
-            是否成功
-        """
+    async def _run_ffmpeg(self, list_file: Path) -> bool:
+        """异步执行 ffmpeg 命令"""
         cmd = [
             "ffmpeg",
             "-y",  # 覆盖输出文件
@@ -127,17 +113,20 @@ class MediaPostprocessor:
         ]
 
         try:
-            result = subprocess.run(
-                cmd,
-                check=True,
-                capture_output=True,
-                # 不指定 text，使用 bytes 避免编码问题
-                # Windows 上 GBK 编码无法处理 ffmpeg 输出中的特殊字符
+            process = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
             )
+            stdout, stderr = await process.communicate()
+
+            if process.returncode != 0:
+                stderr_str = stderr.decode('utf-8', errors='replace') if stderr else ""
+                logger.error(f"ffmpeg 执行失败：{stderr_str}")
+                return False
+
             logger.debug(f"ffmpeg 执行完成")
             return True
-        except subprocess.CalledProcessError as e:
-            # 使用 errors='replace' 解码错误输出
-            stderr = e.stderr.decode('utf-8', errors='replace') if e.stderr else ""
-            logger.error(f"ffmpeg 执行失败：{stderr}")
+        except Exception as e:
+            logger.error(f"ffmpeg 执行异常：{e}")
             return False

@@ -1,17 +1,19 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-m3u8 解析模块
-负责解析 m3u8 文件，提取分片信息
+异步 m3u8 解析模块
+使用 aiohttp 异步解析 m3u8 文件
 """
 
+import asyncio
 from datetime import datetime
 from pathlib import Path
 from urllib.parse import urlparse
+from typing import Optional, Tuple
 
 import m3u8
-import requests
-from requests.exceptions import RequestException
+import aiohttp
+from aiohttp import ClientError
 
 from models import AppConfig, SegmentInfo, ParseResult, MetaData
 from cache_manager import CacheManager
@@ -21,7 +23,7 @@ logger = get_logger("parser")
 
 
 class M3u8Parser:
-    """m3u8 解析器"""
+    """异步 m3u8 解析器"""
 
     HEADERS = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
@@ -31,10 +33,11 @@ class M3u8Parser:
         self.config = config
         self.cache_manager = cache_manager
         self.timeout = config.timeout
+        self._session: Optional[aiohttp.ClientSession] = None
 
-    def parse(self, force_refresh: bool = False) -> ParseResult:
+    async def parse(self, force_refresh: bool = False) -> ParseResult:
         """
-        解析 m3u8 文件
+        异步解析 m3u8 文件
 
         Args:
             force_refresh: 是否强制刷新，忽略元数据缓存
@@ -81,22 +84,14 @@ class M3u8Parser:
         else:
             # 从网络获取
             logger.info("从网络获取 m3u8 文件")
-            try:
-                response = requests.get(
-                    url,
-                    headers=self.HEADERS,
-                    timeout=self.timeout
-                )
-                response.raise_for_status()
-            except RequestException as e:
-                logger.error(f"无法获取 m3u8 文件 - {e}")
+            content = await self._fetch_url(url)
+            if content is None:
                 return ParseResult(
                     segments=[],
                     base_url="",
                     success=False,
-                    error=f"无法获取 m3u8 文件 - {e}"
+                    error=f"无法获取 m3u8 文件：{url}"
                 )
-            content = response.text
             # 保存到缓存
             self.cache_manager.save_master_m3u8(content)
 
@@ -124,34 +119,19 @@ class M3u8Parser:
                 else:
                     # 从网络获取
                     logger.info(f"从网络获取子 playlist: {sub_url}")
-                    try:
-                        sub_response = requests.get(sub_url, headers=self.HEADERS, timeout=self.timeout)
-                        sub_response.raise_for_status()
-                    except RequestException as e:
-                        logger.error(f"无法获取子 m3u8 文件 - {e}")
+                    sub_content = await self._fetch_url(sub_url)
+                    if sub_content is None:
                         return ParseResult(
                             segments=[],
                             base_url=base_url,
                             success=False,
-                            error=f"无法获取子 m3u8 文件 - {e}"
+                            error=f"无法获取子 m3u8 文件：{sub_url}"
                         )
-                    sub_content = sub_response.text
                     # 保存到缓存
                     self.cache_manager.save_resolution_m3u8(best_resolution, sub_content)
 
                 # 缓存所有其他分辨率的子 playlist
-                for sub_playlist in playlist.playlists:
-                    resolution = sub_playlist.stream_info.resolution
-                    if resolution and resolution != best_resolution:
-                        sub_playlist_url = sub_playlist.absolute_uri
-                        if not self.cache_manager.resolution_m3u8_exists(resolution):
-                            logger.info(f"缓存其他分辨率 {resolution} 的 m3u8 文件：{sub_playlist_url}")
-                            try:
-                                sub_response = requests.get(sub_playlist_url, headers=self.HEADERS, timeout=self.timeout)
-                                sub_response.raise_for_status()
-                                self.cache_manager.save_resolution_m3u8(resolution, sub_response.text)
-                            except RequestException as e:
-                                logger.warning(f"无法获取分辨率 {resolution} 的 m3u8 文件：{e}")
+                await self._cache_other_resolutions(playlist, best_resolution)
 
                 playlist = m3u8.loads(sub_content)
                 playlist.base_uri = sub_url
@@ -198,16 +178,47 @@ class M3u8Parser:
             success=True
         )
 
+    async def _cache_other_resolutions(
+        self,
+        playlist: m3u8.M3U8,
+        best_resolution: Tuple[int, int]
+    ) -> None:
+        """异步缓存其他分辨率的子 playlist"""
+        tasks = []
+        for sub_playlist in playlist.playlists:
+            resolution = sub_playlist.stream_info.resolution
+            if resolution and resolution != best_resolution:
+                sub_playlist_url = sub_playlist.absolute_uri
+                if not self.cache_manager.resolution_m3u8_exists(resolution):
+                    tasks.append(self._cache_resolution(sub_playlist_url, resolution))
+
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
+
+    async def _cache_resolution(self, url: str, resolution: Tuple[int, int]) -> None:
+        """缓存单个分辨率的 m3u8 文件"""
+        logger.info(f"缓存分辨率 {resolution} 的 m3u8 文件：{url}")
+        try:
+            content = await self._fetch_url(url)
+            if content:
+                self.cache_manager.save_resolution_m3u8(resolution, content)
+        except Exception as e:
+            logger.warning(f"无法获取分辨率 {resolution} 的 m3u8 文件：{e}")
+
+    async def _fetch_url(self, url: str) -> Optional[str]:
+        """异步获取 URL 内容"""
+        timeout = aiohttp.ClientTimeout(total=self.timeout)
+        async with aiohttp.ClientSession(timeout=timeout, headers=self.HEADERS) as session:
+            try:
+                async with session.get(url) as response:
+                    response.raise_for_status()
+                    return await response.text()
+            except ClientError as e:
+                logger.error(f"无法获取 URL - {e}")
+                return None
+
     def _rebuild_segments_from_metadata(self, metadata: MetaData) -> list[SegmentInfo]:
-        """
-        从元数据重建分片信息列表
-
-        Args:
-            metadata: 元数据对象
-
-        Returns:
-            分片信息列表
-        """
+        """从元数据重建分片信息列表"""
         segments = []
         for index, filename in enumerate(metadata.filenames):
             # 合成完整 URL
@@ -220,14 +231,7 @@ class M3u8Parser:
         return segments
 
     def _save_metadata(self, url: str, base_url: str, segments: list[SegmentInfo]) -> None:
-        """
-        保存元数据到缓存
-
-        Args:
-            url: 原始 m3u8 URL
-            base_url: 基准 URL
-            segments: 分片信息列表
-        """
+        """保存元数据到缓存"""
         # 只保存文件名列表
         filenames = [seg.filename for seg in segments]
 
@@ -245,7 +249,7 @@ class M3u8Parser:
             url=url,
             base_url=base_url,
             filenames=filenames,
-            downloaded_mask=0,  # 初始为 0，会在下载时更新
+            downloaded_mask=0,
             created_at=datetime.now().isoformat()
         )
         self.cache_manager.save_metadata(metadata)
@@ -266,23 +270,13 @@ class M3u8Parser:
         playlist: m3u8.M3U8,
         base_url: str
     ) -> list[SegmentInfo]:
-        """
-        从 m3u8 playlist 中提取分片
-
-        Args:
-            playlist: m3u8 playlist 对象
-            base_url: 基准 URL
-
-        Returns:
-            分片信息列表
-        """
+        """从 m3u8 playlist 中提取分片"""
         segments = []
 
         for index, segment in enumerate(playlist.segments):
             segment_url = segment.absolute_uri
             if segment_url:
-                filename = self._get_segment_filename(segment_url, index)
-
+                filename = self._get_segment_filename(segment_url, base_url, index)
                 segments.append(SegmentInfo(
                     url=segment_url,
                     index=index,
@@ -294,21 +288,33 @@ class M3u8Parser:
     def _get_segment_filename(
         self,
         url_path: str,
+        base_url: str,
         index: int
     ) -> str:
         """
-        生成分片文件名
+        生成分片文件名（相对于 base_url 的路径）
 
         Args:
-            url_path: URL 路径部分
+            url_path: 分片的完整 URL
+            base_url: 基准 URL
             index: 分片索引
 
         Returns:
-            文件名（可能包含相对路径）
+            相对于 base_url 的文件路径
         """
         parsed = urlparse(url_path)
-        path = parsed.path.lstrip("/")
+        full_path = parsed.path.lstrip("/")
 
-        if path:
-            return path
+        # 从 base_url 中提取路径部分
+        base_parsed = urlparse(base_url)
+        base_path = base_parsed.path.lstrip("/")
+
+        # 如果 full_path 以 base_path 开头，则去掉前缀
+        if base_path and full_path.startswith(base_path):
+            relative_path = full_path[len(base_path):]
+            return relative_path
+
+        # 否则返回完整路径
+        if full_path:
+            return full_path
         return f"segment_{index:06d}.ts"

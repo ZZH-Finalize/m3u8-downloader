@@ -4,5 +4,28 @@
             "path": ".",
         }
     ],
-    "settings": {}
+    "settings": {},
+    "tasks": {
+        "version": "2.0.0",
+        "tasks": [
+            {
+                "label": "启动后端服务",
+                "type": "shell",
+                "command": "python",
+                "args": [
+                    "start_server_async.py"
+                ],
+                "options": {
+                    "cwd": "${workspaceFolder}"
+                },
+                "isBackground": true,
+                "problemMatcher": [],
+                "presentation": {
+                    "reveal": "always",
+                    "panel": "new",
+                    "focus": false
+                }
+            }
+        ]
+    }
 }
