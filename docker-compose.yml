@@ -1,0 +1,50 @@
+version: '3.8'
+
+services:
+  m3u8-downloader:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: m3u8-downloader
+    ports:
+      - "5000:5000"
+    volumes:
+      # 挂载下载目录，方便获取下载的视频文件
+      - ./downloads:/app/downloads
+      # 挂载日志目录
+      - ./logs:/app/logs
+      # 可选：挂载宿主机的 ffmpeg（取消注释并使用）
+      # Windows 示例:
+      # - C:\ProgramData\chocolatey\bin\ffmpeg.exe:/usr/bin/ffmpeg:ro
+      # Linux/Mac 示例:
+      # - /usr/bin/ffmpeg:/usr/bin/ffmpeg:ro
+    environment:
+      # ===== 服务器配置 =====
+      # 监听地址（Docker 容器内通常使用 0.0.0.0）
+      - SERVER_HOST=0.0.0.0
+      # 监听端口
+      - SERVER_PORT=5000
+      
+      # ===== 下载配置 =====
+      # 默认下载并发数
+      - DEFAULT_THREADS=8
+      
+      # ===== 日志配置 =====
+      # 日志级别：DEBUG, INFO, WARNING, ERROR, CRITICAL
+      - LOG_LEVEL=INFO
+      # 日志目录（容器内路径）
+      - LOG_DIR=logs
+      # 是否启用调试模式：true, false
+      - DEBUG=false
+      
+      # ===== FFmpeg 配置 =====
+      # ffmpeg 路径（默认使用 PATH 中的 ffmpeg）
+      # 如果宿主机有 ffmpeg，可通过 volumes 挂载并设置此路径
+      - FFMPEG_PATH=ffmpeg
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s

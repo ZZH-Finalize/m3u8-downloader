@@ -6,6 +6,7 @@
 """
 
 import asyncio
+import os
 import uuid
 from datetime import datetime
 from enum import Enum
@@ -130,6 +131,7 @@ class TaskManager:
             output_dir=output_dir,
             max_download_rounds=max_rounds,
             keep_cache=keep_cache,
+            ffmpeg_path=os.environ.get("FFMPEG_PATH", "ffmpeg"),
         )
 
         # 创建缓存管理器

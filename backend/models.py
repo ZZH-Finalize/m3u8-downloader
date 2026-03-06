@@ -186,6 +186,9 @@ class AppConfig:
     output_dir: str = "output"  # 输出目录
     keep_cache: bool = False  # 是否保留缓存
 
+    # 外部工具配置
+    ffmpeg_path: str = "ffmpeg"  # ffmpeg 路径（可通过环境变量 FFMPEG_PATH 设置）
+
     # 运行时生成
     parsed_segments: list[SegmentInfo] = field(default_factory=list)
     downloaded_paths: list[Path] = field(default_factory=list)

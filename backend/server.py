@@ -13,6 +13,7 @@ m3u8 下载服务 - 异步后端 API 服务
 import sys
 import argparse
 import logging
+import os
 from pathlib import Path
 from typing import Optional
 
@@ -31,6 +32,7 @@ from logger import get_logger, LOG_FILE, setup_logger
 # 全局配置
 server_config = {
     "default_threads": 8,  # 默认下载并发数
+    "ffmpeg_path": os.environ.get("FFMPEG_PATH", "ffmpeg"),  # ffmpeg 路径
 }
 
 logger = None  # 在 main() 中初始化
@@ -494,6 +496,7 @@ async def cache_update():
             output_dir="output",
             max_download_rounds=1,
             keep_cache=True,
+            ffmpeg_path=server_config.get("ffmpeg_path", "ffmpeg"),
         )
 
         cache_manager_instance = CacheManager(

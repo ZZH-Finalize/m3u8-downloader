@@ -6,6 +6,7 @@
 """
 
 import asyncio
+import os
 from pathlib import Path
 
 from models import AppConfig, MergeResult
@@ -20,6 +21,8 @@ class MediaPostprocessor:
     def __init__(self, config: AppConfig):
         self.config = config
         self.output_file = config.output_file
+        # 从环境变量或配置获取 ffmpeg 路径
+        self.ffmpeg_path = os.environ.get("FFMPEG_PATH", config.ffmpeg_path)
 
     async def merge(self, segment_paths: list[Path]) -> MergeResult:
         """
@@ -41,10 +44,10 @@ class MediaPostprocessor:
         # 检查 ffmpeg
         ffmpeg_available = await self._check_ffmpeg()
         if not ffmpeg_available:
-            logger.error("未找到 ffmpeg，请确保已安装并添加到 PATH")
+            logger.error(f"未找到 ffmpeg，请确保已安装并添加到 PATH，或设置 FFMPEG_PATH 环境变量指定路径")
             return MergeResult(
                 success=False,
-                error="未找到 ffmpeg，请确保已安装并添加到 PATH"
+                error="未找到 ffmpeg，请确保已安装并添加到 PATH，或设置 FFMPEG_PATH 环境变量指定路径"
             )
 
         # 创建临时文件列表
@@ -75,7 +78,7 @@ class MediaPostprocessor:
         """异步检查 ffmpeg 是否可用"""
         try:
             process = await asyncio.create_subprocess_exec(
-                "ffmpeg", "-version",
+                self.ffmpeg_path, "-version",
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE
             )
@@ -102,7 +105,7 @@ class MediaPostprocessor:
     async def _run_ffmpeg(self, list_file: Path) -> bool:
         """异步执行 ffmpeg 命令"""
         cmd = [
-            "ffmpeg",
+            self.ffmpeg_path,
             "-y",  # 覆盖输出文件
             "-f", "concat",
             "-safe", "0",
