@@ -119,7 +119,48 @@ async def download():
 
         logger.info(f"收到下载请求：URL={url}")
 
-        # 创建任务
+        # 检查是否存在相同 URL 的任务
+        existing_task = task_manager.find_task_by_url(url)
+
+        if existing_task:
+            # 任务已存在
+            if existing_task.progress.status == TaskStatus.FAILED:
+                # 失败任务：重新启动
+                logger.info(f"发现失败任务 {existing_task.task_id}，重新启动")
+                # 重置任务状态
+                existing_task.progress.status = TaskStatus.PENDING
+                existing_task.progress.error = None
+                existing_task.progress.progress_percent = 0.0
+                existing_task.progress.current_step = "等待重启"
+                existing_task._cancel_flag = False
+                # 启动任务
+                task_manager.start_task(existing_task.task_id)
+                return jsonify({
+                    "success": True,
+                    "task_id": existing_task.task_id,
+                    "status": "pending",
+                    "message": "失败任务已重启"
+                })
+            elif existing_task.progress.status in [TaskStatus.PENDING, TaskStatus.PARSING, TaskStatus.DOWNLOADING, TaskStatus.MERGING]:
+                # 运行中任务
+                logger.info(f"任务已存在且正在运行：{existing_task.task_id}, 状态={existing_task.progress.status}")
+                return jsonify({
+                    "success": False,
+                    "error": f"任务已存在且正在运行：{existing_task.task_id}",
+                    "existing_task_id": existing_task.task_id,
+                    "existing_status": existing_task.progress.status.value
+                }), 409
+            else:
+                # 已完成或已取消
+                logger.info(f"任务已存在：{existing_task.task_id}, 状态={existing_task.progress.status}")
+                return jsonify({
+                    "success": False,
+                    "error": f"任务已存在：{existing_task.task_id}",
+                    "existing_task_id": existing_task.task_id,
+                    "existing_status": existing_task.progress.status.value
+                }), 409
+
+        # 创建新任务
         task = task_manager.create_task(
             url=url,
             threads=threads if threads is not None else server_config.get("default_threads", 8),

@@ -96,6 +96,21 @@ class TaskManager:
         self._tasks: Dict[str, DownloadTask] = {}
         self._task_futures: Dict[str, asyncio.Task] = {}
 
+    def find_task_by_url(self, url: str) -> Optional[DownloadTask]:
+        """
+        根据 URL 查找任务
+
+        Args:
+            url: m3u8 URL
+
+        Returns:
+            匹配的任务，如果不存在则返回 None
+        """
+        for task in self._tasks.values():
+            if task.config.url == url:
+                return task
+        return None
+
     def create_task(
         self,
         url: str,
