@@ -10,6 +10,7 @@ const DEFAULT_CONFIG = {
 let selectedTaskId = null;
 let autoRefreshTimer = null;
 let config = { ...DEFAULT_CONFIG };
+let isServerOnline = false;  // 服务器在线状态
 
 // DOM 元素
 const elements = {
@@ -27,7 +28,8 @@ const elements = {
 document.addEventListener('DOMContentLoaded', async () => {
   await loadConfig();
   setupEventListeners();
-  loadTaskList();
+  await checkServerStatus();  // 先检查服务器状态
+  await loadTaskList();  // 再加载任务列表
   startAutoRefresh();
 });
 
@@ -197,17 +199,23 @@ async function handleSaveSettings(e) {
 
 // 加载任务列表
 async function loadTaskList() {
+  // 只在服务器在线时加载任务列表
+  if (!isServerOnline) {
+    renderOfflineState();
+    return;
+  }
+
   showLoading();
-  
+
   try {
     const response = await fetch(`${getApiBaseUrl()}/api/tasks`);
-    
+
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}`);
     }
-    
+
     const result = await response.json();
-    
+
     if (result.success) {
       renderTaskList(result.tasks || []);
     } else {
@@ -219,30 +227,83 @@ async function loadTaskList() {
   }
 }
 
-// 渲染任务列表
+// 渲染任务列表（增量更新，避免闪烁）
 function renderTaskList(tasks) {
-  elements.taskList.innerHTML = '';
-  
+  hideLoading();
+  elements.emptyState.style.display = 'none';
+
   if (tasks.length === 0) {
-    renderEmptyState();
+    elements.taskList.innerHTML = '';
+    elements.emptyState.style.display = 'flex';
     return;
   }
-  
-  hideLoading();
-  
-  tasks.forEach(task => {
-    const taskElement = createTaskElement(task);
-    elements.taskList.appendChild(taskElement);
+
+  // 获取现有任务元素
+  const existingTaskElements = new Map();
+  elements.taskList.querySelectorAll('.task-item').forEach(el => {
+    const taskId = el.dataset.taskId;
+    if (taskId) {
+      existingTaskElements.set(taskId, el);
+    }
   });
+
+  const taskIdsToUpdate = new Set();
+
+  // 遍历新任务数据，更新或创建任务元素
+  tasks.forEach((task, index) => {
+    const taskId = task.task_id;
+    const existingEl = existingTaskElements.get(taskId);
+
+    if (existingEl) {
+      // 任务已存在，检查是否需要更新
+      if (shouldUpdateTask(existingEl, task)) {
+        updateTaskElement(existingEl, task);
+      }
+      // 保持选中状态
+      if (taskId === selectedTaskId) {
+        existingEl.classList.add('selected');
+      }
+      taskIdsToUpdate.add(taskId);
+    } else {
+      // 新任务，创建元素
+      const taskElement = createTaskElement(task);
+      elements.taskList.appendChild(taskElement);
+    }
+  });
+
+  // 删除不再存在的任务元素
+  existingTaskElements.forEach((el, taskId) => {
+    if (!taskIdsToUpdate.has(taskId)) {
+      el.remove();
+    }
+  });
+
+  // 如果没有任务元素，显示空状态
+  if (elements.taskList.children.length === 0) {
+    elements.taskList.innerHTML = '';
+    elements.emptyState.style.display = 'flex';
+  }
+}
+
+// 判断任务是否需要更新
+function shouldUpdateTask(element, task) {
+  const progress = task.progress || {};
+  const existingStatus = element.dataset.status;
+  const existingPercent = element.dataset.progressPercent;
+  const existingDownloaded = element.dataset.segmentsDownloaded;
+
+  return (
+    existingStatus !== (progress.status || '') ||
+    existingPercent !== String(progress.progress_percent || 0) ||
+    existingDownloaded !== String(progress.segments_downloaded || 0)
+  );
 }
 
 // 创建任务元素
 function createTaskElement(task) {
   const div = document.createElement('div');
   div.className = 'task-item';
-  if (task.task_id === selectedTaskId) {
-    div.classList.add('selected');
-  }
+  div.dataset.taskId = task.task_id;
   
   const progress = task.progress || {};
   const statusClass = progress.status || 'pending';
@@ -252,7 +313,24 @@ function createTaskElement(task) {
   const totalSegments = progress.total_segments || 0;
   const createdAt = progress.created_at ? formatTime(progress.created_at) : '';
   const completedAt = progress.completed_at ? formatTime(progress.completed_at) : '';
-  
+  const error = progress.error || '';
+
+  // 存储当前状态用于比较
+  div.dataset.status = statusClass;
+  div.dataset.progressPercent = String(progressPercent);
+  div.dataset.segmentsDownloaded = String(segmentsDownloaded);
+
+  if (task.task_id === selectedTaskId) {
+    div.classList.add('selected');
+  }
+
+  // 失败任务添加重试按钮
+  const retryButton = statusClass === 'failed' ? `
+    <button class="retry-btn" title="重试下载" onclick="retryTask('${task.task_id}', '${escapeHtmlForAttr(task.url)}')">
+      ↻ 重试
+    </button>
+  ` : '';
+
   div.innerHTML = `
     <div class="task-header">
       <span class="task-id">${task.task_id}</span>
@@ -268,21 +346,27 @@ function createTaskElement(task) {
         <span class="segments-info">${segmentsDownloaded}/${totalSegments}</span>
       </div>
       <div class="task-step">${escapeHtml(currentStep)}</div>
+      ${error ? `<div class="task-error" title="${escapeHtmlForAttr(error)}">错误：${escapeHtml(error)}</div>` : ''}
       ${createdAt ? `<div class="task-time">创建：${createdAt}${completedAt ? ` | 完成：${completedAt}` : ''}</div>` : ''}
+      ${retryButton}
     </div>
   `;
-  
-  div.addEventListener('click', () => {
+
+  div.addEventListener('click', (e) => {
+    // 如果点击的是重试按钮，不触发选中
+    if (e.target.classList.contains('retry-btn')) {
+      return;
+    }
     // 取消之前的选中状态
     document.querySelectorAll('.task-item').forEach(item => {
       item.classList.remove('selected');
     });
-    
+
     // 选中当前任务
     div.classList.add('selected');
     selectedTaskId = task.task_id;
   });
-  
+
   return div;
 }
 
@@ -298,6 +382,141 @@ function getStatusText(status) {
     cancelled: '已取消'
   };
   return statusMap[status] || status;
+}
+
+// 更新任务元素（只更新变化的部分）
+function updateTaskElement(element, task) {
+  const progress = task.progress || {};
+  const statusClass = progress.status || 'pending';
+  const progressPercent = progress.progress_percent || 0;
+  const currentStep = progress.current_step || '等待中';
+  const segmentsDownloaded = progress.segments_downloaded || 0;
+  const totalSegments = progress.total_segments || 0;
+  const error = progress.error || '';
+
+  // 更新状态标记
+  element.dataset.status = statusClass;
+  element.dataset.progressPercent = String(progressPercent);
+  element.dataset.segmentsDownloaded = String(segmentsDownloaded);
+
+  // 更新状态标签
+  const statusEl = element.querySelector('.task-status');
+  if (statusEl) {
+    statusEl.className = `task-status ${statusClass}`;
+    statusEl.textContent = getStatusText(statusClass);
+  }
+
+  // 更新进度条
+  const progressBar = element.querySelector('.progress-bar');
+  if (progressBar) {
+    progressBar.style.width = `${progressPercent}%`;
+  }
+
+  // 更新进度文本
+  const progressText = element.querySelector('.progress-text');
+  if (progressText) {
+    progressText.textContent = `${progressPercent.toFixed(1)}%`;
+  }
+
+  // 更新分片信息
+  const segmentsInfo = element.querySelector('.segments-info');
+  if (segmentsInfo) {
+    segmentsInfo.textContent = `${segmentsDownloaded}/${totalSegments}`;
+  }
+
+  // 更新当前步骤
+  const taskStep = element.querySelector('.task-step');
+  if (taskStep) {
+    taskStep.textContent = escapeHtml(currentStep);
+  }
+
+  // 更新或添加错误信息
+  let errorEl = element.querySelector('.task-error');
+  if (error) {
+    if (!errorEl) {
+      const progressContainer = element.querySelector('.task-progress');
+      if (progressContainer) {
+        errorEl = document.createElement('div');
+        errorEl.className = 'task-error';
+        const taskStepEl = progressContainer.querySelector('.task-step');
+        if (taskStepEl) {
+          taskStepEl.after(errorEl);
+        }
+      }
+    }
+    if (errorEl) {
+      errorEl.title = escapeHtmlForAttr(error);
+      errorEl.textContent = `错误：${escapeHtml(error)}`;
+    }
+  } else if (errorEl) {
+    errorEl.remove();
+  }
+
+  // 更新或添加重试按钮
+  let retryBtn = element.querySelector('.retry-btn');
+  if (statusClass === 'failed') {
+    if (!retryBtn) {
+      const progressContainer = element.querySelector('.task-progress');
+      if (progressContainer) {
+        retryBtn = document.createElement('button');
+        retryBtn.className = 'retry-btn';
+        retryBtn.title = '重试下载';
+        retryBtn.innerHTML = `↻ 重试`;
+        retryBtn.onclick = () => retryTask(task.task_id, task.url);
+        progressContainer.appendChild(retryBtn);
+      }
+    }
+  } else if (retryBtn) {
+    retryBtn.remove();
+  }
+}
+
+// 重试任务
+async function retryTask(taskId, url) {
+  if (!confirm(`确定要重试任务 ${taskId} 吗？`)) {
+    return;
+  }
+
+  const taskData = {
+    url: url,
+    threads: config.defaultThreads,
+    output: 'video.mp4',
+    max_rounds: 5,
+    keep_cache: true,  // 重试时使用缓存
+    debug: false
+  };
+
+  try {
+    const response = await fetch(`${getApiBaseUrl()}/api/download`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(taskData)
+    });
+
+    const result = await response.json();
+
+    if (result.success) {
+      alert(`重试任务已提交：${result.task_id}`);
+      await loadTaskList();
+    } else {
+      alert(`重试失败：${result.error || '未知错误'}`);
+    }
+  } catch (error) {
+    alert(`请求失败：${error.message}`);
+  }
+}
+
+// HTML 转义（用于属性值）
+function escapeHtmlForAttr(text) {
+  if (!text) return '';
+  return String(text)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }
 
 // 格式化时间
@@ -322,6 +541,13 @@ function renderEmptyState() {
   hideLoading();
   elements.taskList.innerHTML = '';
   elements.emptyState.style.display = 'flex';
+}
+
+// 渲染离线状态
+function renderOfflineState() {
+  hideLoading();
+  elements.taskList.innerHTML = `<div class="empty-state"><p>服务器离线，无法加载任务列表</p></div>`;
+  elements.emptyState.style.display = 'none';
 }
 
 // 渲染错误状态
@@ -377,20 +603,22 @@ async function deleteSelectedTask() {
 async function checkServerStatus() {
   const statusIndicator = document.querySelector('.status-indicator');
   const statusText = document.querySelector('.status-text');
-  
+
   try {
     const response = await fetch(`${getApiBaseUrl()}/health`);
     const result = await response.json();
-    
+
     if (result.status === 'healthy') {
       statusIndicator.className = 'status-indicator online';
       statusText.textContent = `服务器在线 (${config.host}:${config.port})`;
+      isServerOnline = true;
     } else {
       throw new Error('服务状态异常');
     }
   } catch (error) {
     statusIndicator.className = 'status-indicator offline';
     statusText.textContent = `服务器离线 (${config.host}:${config.port})`;
+    isServerOnline = false;
   }
 }
 

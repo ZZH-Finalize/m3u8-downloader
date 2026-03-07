@@ -1,6 +1,6 @@
 # m3u8 下载器 Edge 插件
 
-这是一个 Edge 浏览器插件，用于管理 m3u8 视频下载任务。
+这是 m3u8 下载器的**官方前端**，一个 Edge 浏览器插件，用于管理 m3u8 视频下载任务。
 
 ## 功能特性
 
@@ -9,6 +9,7 @@
 - **系统设置**: 配置服务器地址、端口、并发数等
 - **任务列表**: 实时查看所有下载任务的进度和状态
 - **自动刷新**: 可配置自动刷新任务列表
+- **进度跟踪**: 实时显示下载进度和状态
 
 ## 安装方法
 
@@ -34,22 +35,37 @@
 1. 确保后端服务已启动（默认 `http://127.0.0.1:5000`）
 2. 点击浏览器工具栏中的插件图标
 3. 点击"系统设置"配置服务器地址（如需要）
-4. 点击"添加任务"提交下载任务
-5. 在任务列表中查看下载进度
+4. 在"添加任务"标签页中提交下载任务
+5. 在"任务列表"标签页中查看下载进度
+
+**提示**: 插件会自动保存配置，下次使用时会自动连接上次配置的服务器。
 
 ## 文件结构
 
 ```
 extension/
-├── manifest.json      # 插件配置文件
+├── manifest.json      # 插件配置文件 (Manifest V3)
 ├── popup.html         # 插件页面
 ├── popup.css          # 样式文件
 ├── popup.js           # 逻辑脚本
+├── build.js           # 构建脚本
+├── package.json       # npm 配置
 └── icons/
     ├── icon.svg       # 图标源文件
     ├── icon16.png     # 16x16 图标
     ├── icon48.png     # 48x48 图标
     └── icon128.png    # 128x128 图标
+```
+
+## 项目结构
+
+```
+m3u8-downloader/
+├── backend/           # 后端服务（Python + Quart）
+├── extension/         # Edge 插件（官方前端）
+├── tools/             # 工具目录
+│   └── test_cli.py    # API 测试工具（开发调试用）
+└── docker/            # Docker 配置
 ```
 
 ## API 配置
@@ -68,10 +84,27 @@ extension/
 本插件需要配合 m3u8 下载器后端服务使用。启动后端服务：
 
 ```bash
-python start_server_async.py --host 127.0.0.1 --port 5000
+python backend/server.py --host 127.0.0.1 --port 5000
 ```
 
 详细 API 文档请参考 [API.md](../API.md)。
+
+## 测试工具
+
+项目提供了命令行测试工具 `tools/test_cli.py`，用于开发调试：
+
+```bash
+# 下载视频
+python tools/test_cli.py download <m3u8_url> --trace
+
+# 查询任务状态
+python tools/test_cli.py task status <task_id>
+
+# 列出所有缓存
+python tools/test_cli.py cache list
+```
+
+**注意**: 测试工具仅用于开发调试，生产环境请使用 Edge 插件。
 
 ## 开发说明
 
