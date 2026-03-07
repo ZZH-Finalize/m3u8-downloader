@@ -219,6 +219,7 @@ class TaskManager:
     def remove_task(self, task_id: str) -> bool:
         """
         移除任务（从任务列表中删除）
+        仅当任务已结束（完成、失败或取消）时才能移除
 
         Args:
             task_id: 任务 ID
@@ -226,6 +227,15 @@ class TaskManager:
         Returns:
             是否成功移除
         """
+        task = self._tasks.get(task_id)
+        if not task:
+            return False
+        
+        # 检查任务是否已结束
+        if task.progress.status not in [TaskStatus.COMPLETED, TaskStatus.FAILED, TaskStatus.CANCELLED]:
+            logger.warning(f"任务 {task_id} 仍在运行中，无法移除")
+            return False
+        
         if task_id in self._tasks:
             del self._tasks[task_id]
             if task_id in self._task_futures:

@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>m3u8 下载器</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="container">
+    <!-- 工具栏 -->
+    <div class="toolbar">
+      <button id="btn-add-task" class="toolbar-btn" title="添加任务">
+        <span class="icon">➕</span>
+        <span>添加任务</span>
+      </button>
+      <button id="btn-delete-task" class="toolbar-btn" title="删除任务">
+        <span class="icon">🗑️</span>
+        <span>删除任务</span>
+      </button>
+      <button id="btn-settings" class="toolbar-btn" title="系统设置">
+        <span class="icon">⚙️</span>
+        <span>系统设置</span>
+      </button>
+    </div>
+
+    <!-- 任务列表 -->
+    <div class="task-list-container">
+      <div class="task-list-header">
+        <span>下载任务</span>
+        <button id="btn-refresh" class="refresh-btn" title="刷新列表">🔄</button>
+      </div>
+      <div id="task-list" class="task-list">
+        <!-- 任务项将通过 JS 动态插入 -->
+      </div>
+      <div id="empty-state" class="empty-state" style="display: none;">
+        <span class="empty-icon">📭</span>
+        <p>暂无下载任务</p>
+      </div>
+      <div id="loading-state" class="loading-state">
+        <span class="loading-spinner">⏳</span>
+        <p>加载中...</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- 添加任务对话框 -->
+  <div id="add-task-modal" class="modal" style="display: none;">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>添加下载任务</h3>
+        <button class="modal-close" id="close-add-modal">&times;</button>
+      </div>
+      <div class="modal-body">
+        <form id="add-task-form">
+          <div class="form-group">
+            <label for="task-url">m3u8 链接 <span class="required">*</span></label>
+            <input type="url" id="task-url" placeholder="https://example.com/video.m3u8" required>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label for="task-threads">并发数</label>
+              <input type="number" id="task-threads" min="1" max="32" value="8">
+            </div>
+            <div class="form-group">
+              <label for="task-output">输出文件名</label>
+              <input type="text" id="task-output" value="video.mp4">
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label for="task-max-rounds">最大重试次数</label>
+              <input type="number" id="task-max-rounds" min="1" max="10" value="5">
+            </div>
+            <div class="form-group">
+              <label for="task-keep-cache">保留缓存</label>
+              <select id="task-keep-cache">
+                <option value="false">否</option>
+                <option value="true">是</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-group checkbox-group">
+            <label>
+              <input type="checkbox" id="task-debug">
+              启用调试模式
+            </label>
+          </div>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button type="button" id="cancel-add-task" class="btn btn-secondary">取消</button>
+        <button type="submit" form="add-task-form" class="btn btn-primary">添加任务</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 系统设置对话框 -->
+  <div id="settings-modal" class="modal" style="display: none;">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>系统设置</h3>
+        <button class="modal-close" id="close-settings-modal">&times;</button>
+      </div>
+      <div class="modal-body">
+        <form id="settings-form">
+          <div class="form-group">
+            <label for="setting-host">服务器地址</label>
+            <input type="text" id="setting-host" placeholder="127.0.0.1">
+          </div>
+          <div class="form-group">
+            <label for="setting-port">端口</label>
+            <input type="number" id="setting-port" min="1" max="65535" placeholder="5000">
+          </div>
+          <div class="form-group">
+            <label for="setting-default-threads">默认并发数</label>
+            <input type="number" id="setting-default-threads" min="1" max="32">
+          </div>
+          <div class="form-group">
+            <label>自动刷新间隔</label>
+            <select id="setting-auto-refresh">
+              <option value="0">不刷新</option>
+              <option value="1000">1 秒</option>
+              <option value="2000">2 秒</option>
+              <option value="5000">5 秒</option>
+              <option value="10000">10 秒</option>
+            </select>
+          </div>
+        </form>
+        <div id="server-status" class="server-status">
+          <span class="status-indicator"></span>
+          <span class="status-text">检查中...</span>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" id="cancel-settings" class="btn btn-secondary">取消</button>
+        <button type="submit" form="settings-form" class="btn btn-primary">保存设置</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

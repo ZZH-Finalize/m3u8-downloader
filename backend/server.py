@@ -275,37 +275,31 @@ async def get_task_status(task_id: str):
 
 
 @app.route('/api/tasks/<task_id>', methods=['DELETE'])
-async def cancel_task(task_id: str):
-    """取消任务"""
-    success = task_manager.cancel_task(task_id)
-
-    if success:
-        return jsonify({
-            "success": True,
-            "message": f"任务已取消：{task_id}"
-        })
-    else:
-        return jsonify({
-            "success": False,
-            "error": "任务不存在或已结束"
-        }), 400
-
-
-@app.route('/api/tasks/<task_id>', methods=['DELETE'])
-async def remove_task(task_id: str):
-    """移除任务（从列表中删除）"""
-    success = task_manager.remove_task(task_id)
-
-    if success:
-        return jsonify({
-            "success": True,
-            "message": f"任务已移除：{task_id}"
-        })
-    else:
+async def delete_task(task_id: str):
+    """
+    删除任务
+    - 如果任务正在运行：先取消任务，再从列表中移除
+    - 如果任务已结束（完成/失败/取消）：直接从列表中移除
+    """
+    task = task_manager.get_task(task_id)
+    
+    if not task:
         return jsonify({
             "success": False,
             "error": "任务不存在"
         }), 404
+    
+    # 如果任务正在运行，先取消
+    if task.progress.status not in [TaskStatus.COMPLETED, TaskStatus.FAILED, TaskStatus.CANCELLED]:
+        task_manager.cancel_task(task_id)
+    
+    # 移除任务
+    task_manager.remove_task(task_id)
+    
+    return jsonify({
+        "success": True,
+        "message": f"任务已删除：{task_id}"
+    })
 
 
 # ===== 缓存管理 API =====
@@ -545,11 +539,11 @@ def parse_args():
   %(prog)s --log-dir /var/log/m3u8-downloader
 
 API 端点:
-  POST /api/download      - 提交异步下载任务
-  GET  /api/tasks         - 列出所有任务
-  GET  /api/tasks/<id>    - 查询任务状态
-  DELETE /api/tasks/<id>  - 取消任务
-  POST /api/download/sync - 同步下载（兼容旧 API）
+  POST /api/download            - 提交异步下载任务
+  GET  /api/tasks               - 列出所有任务
+  GET  /api/tasks/<id>          - 查询任务状态
+  DELETE /api/tasks/<id>        - 删除任务（运行中则先取消再删除，已结束则直接删除）
+  POST /api/download/sync       - 同步下载（兼容旧 API）
         """
     )
     parser.add_argument(

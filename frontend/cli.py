@@ -63,7 +63,7 @@ def create_parser() -> argparse.ArgumentParser:
   %(prog)s download https://example.com/video.m3u8 --host 192.168.1.100 --port 8080
   %(prog)s task list --host 192.168.1.100
   %(prog)s task status abc12345
-  %(prog)s task cancel abc12345
+  %(prog)s task delete abc12345
   %(prog)s cache list
   %(prog)s cache rm abc123
   %(prog)s cache clear
@@ -141,8 +141,7 @@ download 示例:
 task 示例:
   %(prog)s list                        # 列出所有任务
   %(prog)s status <task_id>            # 查询任务状态
-  %(prog)s cancel <task_id>            # 取消任务
-  %(prog)s remove <task_id>            # 移除任务
+  %(prog)s delete <task_id>            # 删除任务（运行中则先取消再删除，已结束则直接删除）
   %(prog)s list --host 192.168.1.100   # 指定服务器地址
         """,
     )
@@ -161,21 +160,13 @@ task 示例:
     )
     add_api_args(task_status_parser)
 
-    # task cancel
-    task_cancel_parser = task_subparsers.add_parser("cancel", help="取消任务")
-    task_cancel_parser.add_argument(
+    # task delete
+    task_delete_parser = task_subparsers.add_parser("delete", help="删除任务")
+    task_delete_parser.add_argument(
         "task_id",
-        help="要取消的任务 ID",
+        help="要删除的任务 ID",
     )
-    add_api_args(task_cancel_parser)
-
-    # task remove
-    task_remove_parser = task_subparsers.add_parser("remove", help="移除任务")
-    task_remove_parser.add_argument(
-        "task_id",
-        help="要移除的任务 ID",
-    )
-    add_api_args(task_remove_parser)
+    add_api_args(task_delete_parser)
 
     # ===== cache 子命令 =====
     cache_parser = subparsers.add_parser(
@@ -487,8 +478,8 @@ def cmd_task_status(args: argparse.Namespace) -> None:
         sys.exit(1)
 
 
-def cmd_task_cancel(args: argparse.Namespace) -> None:
-    """执行 task cancel 命令"""
+def cmd_task_delete(args: argparse.Namespace) -> None:
+    """执行 task delete 命令"""
     api_base_url = get_api_base_url(args.host, args.port)
 
     try:
@@ -499,31 +490,9 @@ def cmd_task_cancel(args: argparse.Namespace) -> None:
         result = response.json()
 
         if result.get("success"):
-            print(f"任务已取消：{args.task_id}")
+            print(f"任务已删除：{args.task_id}")
         else:
-            print(f"取消失败：{result.get('error')}", file=sys.stderr)
-            sys.exit(1)
-
-    except requests.exceptions.RequestException as e:
-        print(f"错误：请求失败 - {e}", file=sys.stderr)
-        sys.exit(1)
-
-
-def cmd_task_remove(args: argparse.Namespace) -> None:
-    """执行 task remove 命令"""
-    api_base_url = get_api_base_url(args.host, args.port)
-
-    try:
-        response = requests.delete(
-            f"{api_base_url}/api/tasks/{args.task_id}",
-            timeout=30
-        )
-        result = response.json()
-
-        if result.get("success"):
-            print(f"任务已移除：{args.task_id}")
-        else:
-            print(f"移除失败：{result.get('error')}", file=sys.stderr)
+            print(f"删除失败：{result.get('error')}", file=sys.stderr)
             sys.exit(1)
 
     except requests.exceptions.RequestException as e:
@@ -535,13 +504,12 @@ def cmd_task(args: argparse.Namespace) -> None:
     """执行 task 命令"""
     if not args.task_action:
         # 没有指定子命令，显示帮助
-        print("用法：m3u8-downloader task <list|status|cancel|remove>")
+        print("用法：m3u8-downloader task <list|status|delete>")
         print()
         print("子命令:")
         print("  list    列出所有任务")
         print("  status  查询任务状态")
-        print("  cancel  取消任务")
-        print("  remove  移除任务")
+        print("  delete  删除任务（运行中则先取消再删除，已结束则直接删除）")
         print()
         print("使用 'm3u8-downloader task <subcommand> --help' 获取更多信息")
         sys.exit(1)
@@ -556,10 +524,8 @@ def cmd_task(args: argparse.Namespace) -> None:
         cmd_task_list(args)
     elif args.task_action == "status":
         cmd_task_status(args)
-    elif args.task_action == "cancel":
-        cmd_task_cancel(args)
-    elif args.task_action == "remove":
-        cmd_task_remove(args)
+    elif args.task_action == "delete":
+        cmd_task_delete(args)
     else:
         print(f"未知的任务操作：{args.task_action}", file=sys.stderr)
         sys.exit(1)

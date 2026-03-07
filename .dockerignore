@@ -54,3 +54,6 @@ docker-compose.yml
 
 # 工作区文件
 *.code-workspace
+
+# Browser Extensions
+extension/node_modules/

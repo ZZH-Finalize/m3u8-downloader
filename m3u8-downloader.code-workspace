@@ -25,7 +25,30 @@
                     "panel": "new",
                     "focus": false
                 }
-            }
+            },
+            {
+                "label": "install dep",
+                "type": "shell",
+                "command": "npm",
+                "args": [
+                    "install"
+                ],
+                "options": {
+                    "cwd": "${workspaceFolder}/extension"
+                }
+            },
+            {
+                "label": "build extension",
+                "type": "shell",
+                "command": "npm",
+                "args": [
+                    "run",
+                    "build"
+                ],
+                "options": {
+                    "cwd": "${workspaceFolder}/extension"
+                }
+            },
         ]
     }
 }
