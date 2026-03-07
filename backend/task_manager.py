@@ -321,6 +321,13 @@ class TaskManager:
 
             logger.info(f"[{task_id}] 下载完成：{success_count}/{len(config.parsed_segments)} 个分片")
 
+            # 检查是否所有分片都下载成功
+            if failed_count > 0:
+                # 分片未全部下载成功，标记任务失败，保留现有分片
+                error_msg = f"分片未全部下载成功：{failed_count}/{len(config.parsed_segments)} 个失败"
+                logger.error(f"[{task_id}] {error_msg}，任务失败，保留已下载分片")
+                raise Exception(error_msg)
+
             # 保存下载路径
             config.downloaded_paths = downloader.get_success_paths(download_results)
 

@@ -18,6 +18,42 @@ body {
   display: flex;
   flex-direction: column;
   height: 500px;
+  position: relative;
+}
+
+/* 提示气泡样式 */
+.toast {
+  position: absolute;
+  top: 60px;
+  left: 50%;
+  transform: translateX(-50%) translateY(-100%);
+  padding: 10px 20px;
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #fff;
+  background-color: rgba(0, 0, 0, 0.8);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  opacity: 0;
+  visibility: hidden;
+  transition: all 0.3s ease;
+  z-index: 1001;
+  max-width: 80%;
+  text-align: center;
+}
+
+.toast.show {
+  opacity: 1;
+  visibility: visible;
+  transform: translateX(-50%) translateY(0);
+}
+
+.toast.success {
+  background-color: rgba(40, 167, 69, 0.9);
+}
+
+.toast.error {
+  background-color: rgba(220, 53, 69, 0.9);
 }
 
 /* 工具栏样式 */
@@ -57,6 +93,21 @@ body {
 
 .toolbar-btn .icon {
   font-size: 16px;
+}
+
+/* 按钮禁用状态 */
+.toolbar-btn.disabled {
+  background-color: rgba(200, 200, 200, 0.5);
+  color: #999;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+.toolbar-btn.disabled:hover {
+  background-color: rgba(200, 200, 200, 0.5);
+  transform: none;
+  box-shadow: none;
 }
 
 /* 任务列表容器 */
@@ -113,6 +164,7 @@ body {
   border: 1px solid #e0e0e0;
   border-radius: 8px;
   transition: all 0.2s ease;
+  will-change: transform, box-shadow;
 }
 
 .task-item:hover {
@@ -124,6 +176,15 @@ body {
   border-color: #667eea;
   background-color: #f0f3ff;
   box-shadow: 0 2px 8px rgba(102, 126, 234, 0.25);
+}
+
+/* 进度条平滑过渡 */
+.progress-bar {
+  height: 100%;
+  background: linear-gradient(90deg, #667eea, #764ba2);
+  border-radius: 4px;
+  transition: width 0.2s ease-out;
+  will-change: width;
 }
 
 .task-header {
@@ -209,7 +270,8 @@ body {
   height: 100%;
   background: linear-gradient(90deg, #667eea, #764ba2);
   border-radius: 4px;
-  transition: width 0.3s ease;
+  /* 移除过渡效果以避免自动刷新时的视觉延迟 */
+  will-change: width;
 }
 
 .progress-info {
@@ -338,6 +400,11 @@ body {
   max-height: 90vh;
   overflow: hidden;
   box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+}
+
+/* 小型模态框 */
+.modal-content-sm {
+  max-width: 350px;
 }
 
 .modal-header {

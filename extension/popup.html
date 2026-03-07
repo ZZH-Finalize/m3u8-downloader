@@ -8,6 +8,9 @@
 </head>
 <body>
   <div class="container">
+    <!-- 提示气泡 -->
+    <div id="toast" class="toast"></div>
+
     <!-- 工具栏 -->
     <div class="toolbar">
       <button id="btn-add-task" class="toolbar-btn" title="添加任务">
@@ -44,9 +47,9 @@
     </div>
   </div>
 
-  <!-- 添加任务对话框 -->
+  <!-- 添加任务对话框 - 简化为快速添加表单 -->
   <div id="add-task-modal" class="modal" style="display: none;">
-    <div class="modal-content">
+    <div class="modal-content modal-content-sm">
       <div class="modal-header">
         <h3>添加下载任务</h3>
         <button class="modal-close" id="close-add-modal">&times;</button>
@@ -67,23 +70,10 @@
               <input type="text" id="task-output" value="video.mp4">
             </div>
           </div>
-          <div class="form-row">
-            <div class="form-group">
-              <label for="task-max-rounds">最大重试次数</label>
-              <input type="number" id="task-max-rounds" min="1" max="10" value="5">
-            </div>
-            <div class="form-group">
-              <label for="task-keep-cache">保留缓存</label>
-              <select id="task-keep-cache">
-                <option value="false">否</option>
-                <option value="true">是</option>
-              </select>
-            </div>
-          </div>
           <div class="form-group checkbox-group">
             <label>
-              <input type="checkbox" id="task-debug">
-              启用调试模式
+              <input type="checkbox" id="task-keep-cache">
+              保留分片缓存
             </label>
           </div>
         </form>

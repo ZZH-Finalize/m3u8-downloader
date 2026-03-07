@@ -21,7 +21,12 @@ const elements = {
   settingsModal: document.getElementById('settings-modal'),
   addTaskForm: document.getElementById('add-task-form'),
   settingsForm: document.getElementById('settings-form'),
-  serverStatus: document.getElementById('server-status')
+  serverStatus: document.getElementById('server-status'),
+  toast: document.getElementById('toast'),
+  btnAddTask: document.getElementById('btn-add-task'),
+  btnDeleteTask: document.getElementById('btn-delete-task'),
+  btnRefresh: document.getElementById('btn-refresh'),
+  btnSettings: document.getElementById('btn-settings')
 };
 
 // 初始化
@@ -71,10 +76,10 @@ function getApiBaseUrl() {
 // 设置事件监听器
 function setupEventListeners() {
   // 工具栏按钮
-  document.getElementById('btn-add-task').addEventListener('click', showAddTaskModal);
-  document.getElementById('btn-delete-task').addEventListener('click', deleteSelectedTask);
-  document.getElementById('btn-settings').addEventListener('click', showSettingsModal);
-  document.getElementById('btn-refresh').addEventListener('click', loadTaskList);
+  elements.btnAddTask.addEventListener('click', showAddTaskModal);
+  elements.btnDeleteTask.addEventListener('click', deleteSelectedTask);
+  elements.btnSettings.addEventListener('click', showSettingsModal);
+  elements.btnRefresh.addEventListener('click', handleRefresh);
 
   // 模态框关闭按钮
   document.getElementById('close-add-modal').addEventListener('click', hideAddTaskModal);
@@ -112,14 +117,16 @@ function setupEventListeners() {
 
 // 显示添加任务模态框
 function showAddTaskModal() {
+  // 服务器离线时不响应
+  if (!isServerOnline) {
+    showToast('服务器离线，无法添加任务', 'error');
+    return;
+  }
   // 重置表单
   document.getElementById('task-url').value = '';
   document.getElementById('task-threads').value = config.defaultThreads;
   document.getElementById('task-output').value = 'video.mp4';
-  document.getElementById('task-max-rounds').value = 5;
-  document.getElementById('task-keep-cache').value = 'false';
-  document.getElementById('task-debug').checked = false;
-  
+
   elements.addTaskModal.style.display = 'flex';
   document.getElementById('task-url').focus();
 }
@@ -144,18 +151,16 @@ function hideSettingsModal() {
 // 处理添加任务
 async function handleAddTask(e) {
   e.preventDefault();
-  
+
   const taskData = {
     url: document.getElementById('task-url').value.trim(),
     threads: parseInt(document.getElementById('task-threads').value) || config.defaultThreads,
     output: document.getElementById('task-output').value.trim() || 'video.mp4',
-    max_rounds: parseInt(document.getElementById('task-max-rounds').value) || 5,
-    keep_cache: document.getElementById('task-keep-cache').value === 'true',
-    debug: document.getElementById('task-debug').checked
+    keep_cache: document.getElementById('task-keep-cache').checked
   };
 
   if (!taskData.url) {
-    alert('请输入 m3u8 链接');
+    showToast('请输入 m3u8 链接', 'error');
     return;
   }
 
@@ -169,32 +174,33 @@ async function handleAddTask(e) {
     });
 
     const result = await response.json();
-    
+
     if (result.success) {
-      alert(`任务已提交：${result.task_id}`);
+      showToast(`任务已提交：${result.task_id}`, 'success');
       hideAddTaskModal();
       await loadTaskList();
     } else {
-      alert(`提交失败：${result.error || '未知错误'}`);
+      showToast(`提交失败：${result.error || '未知错误'}`, 'error');
     }
   } catch (error) {
-    alert(`请求失败：${error.message}`);
+    showToast(`请求失败：${error.message}`, 'error');
   }
 }
 
 // 处理保存设置
 async function handleSaveSettings(e) {
   e.preventDefault();
-  
+
   config.host = document.getElementById('setting-host').value.trim() || '127.0.0.1';
   config.port = document.getElementById('setting-port').value.trim() || '5000';
   config.defaultThreads = parseInt(document.getElementById('setting-default-threads').value) || 8;
   config.autoRefresh = parseInt(document.getElementById('setting-auto-refresh').value) || 0;
-  
+
   await saveConfig();
   hideSettingsModal();
+  await checkServerStatus();
   await loadTaskList();
-  alert('设置已保存');
+  showToast('设置已保存', 'success');
 }
 
 // 加载任务列表
@@ -204,8 +210,6 @@ async function loadTaskList() {
     renderOfflineState();
     return;
   }
-
-  showLoading();
 
   try {
     const response = await fetch(`${getApiBaseUrl()}/api/tasks`);
@@ -229,14 +233,19 @@ async function loadTaskList() {
 
 // 渲染任务列表（增量更新，避免闪烁）
 function renderTaskList(tasks) {
-  hideLoading();
-  elements.emptyState.style.display = 'none';
-
+  // 处理空状态
   if (tasks.length === 0) {
     elements.taskList.innerHTML = '';
+    elements.taskList.style.display = 'none';
     elements.emptyState.style.display = 'flex';
+    elements.loadingState.style.display = 'none';
     return;
   }
+
+  // 有任务时，确保任务列表可见，空状态和加载状态隐藏
+  elements.taskList.style.display = 'block';
+  elements.emptyState.style.display = 'none';
+  elements.loadingState.style.display = 'none';
 
   // 获取现有任务元素
   const existingTaskElements = new Map();
@@ -247,10 +256,10 @@ function renderTaskList(tasks) {
     }
   });
 
-  const taskIdsToUpdate = new Set();
+  const taskIdsInNewList = new Set();
 
   // 遍历新任务数据，更新或创建任务元素
-  tasks.forEach((task, index) => {
+  tasks.forEach((task) => {
     const taskId = task.task_id;
     const existingEl = existingTaskElements.get(taskId);
 
@@ -263,7 +272,7 @@ function renderTaskList(tasks) {
       if (taskId === selectedTaskId) {
         existingEl.classList.add('selected');
       }
-      taskIdsToUpdate.add(taskId);
+      taskIdsInNewList.add(taskId);
     } else {
       // 新任务，创建元素
       const taskElement = createTaskElement(task);
@@ -273,16 +282,10 @@ function renderTaskList(tasks) {
 
   // 删除不再存在的任务元素
   existingTaskElements.forEach((el, taskId) => {
-    if (!taskIdsToUpdate.has(taskId)) {
+    if (!taskIdsInNewList.has(taskId)) {
       el.remove();
     }
   });
-
-  // 如果没有任务元素，显示空状态
-  if (elements.taskList.children.length === 0) {
-    elements.taskList.innerHTML = '';
-    elements.emptyState.style.display = 'flex';
-  }
 }
 
 // 判断任务是否需要更新
@@ -480,10 +483,7 @@ async function retryTask(taskId, url) {
   const taskData = {
     url: url,
     threads: config.defaultThreads,
-    output: 'video.mp4',
-    max_rounds: 5,
-    keep_cache: true,  // 重试时使用缓存
-    debug: false
+    output: 'video.mp4'
   };
 
   try {
@@ -498,13 +498,13 @@ async function retryTask(taskId, url) {
     const result = await response.json();
 
     if (result.success) {
-      alert(`重试任务已提交：${result.task_id}`);
+      showToast(`重试任务已提交：${result.task_id}`, 'success');
       await loadTaskList();
     } else {
-      alert(`重试失败：${result.error || '未知错误'}`);
+      showToast(`重试失败：${result.error || '未知错误'}`, 'error');
     }
   } catch (error) {
-    alert(`请求失败：${error.message}`);
+    showToast(`请求失败：${error.message}`, 'error');
   }
 }
 
@@ -538,64 +538,71 @@ function escapeHtml(text) {
 
 // 渲染空状态
 function renderEmptyState() {
-  hideLoading();
   elements.taskList.innerHTML = '';
+  elements.taskList.style.display = 'none';
   elements.emptyState.style.display = 'flex';
+  elements.loadingState.style.display = 'none';
 }
 
 // 渲染离线状态
 function renderOfflineState() {
-  hideLoading();
-  elements.taskList.innerHTML = `<div class="empty-state"><p>服务器离线，无法加载任务列表</p></div>`;
+  elements.taskList.style.display = 'none';
   elements.emptyState.style.display = 'none';
+  elements.loadingState.style.display = 'none';
+  // 在任务列表容器中显示离线消息
+  elements.taskList.innerHTML = `<div class="empty-state"><p>服务器离线，无法加载任务列表</p></div>`;
+  elements.taskList.style.display = 'block';
 }
 
 // 渲染错误状态
 function renderErrorState(errorMsg) {
-  hideLoading();
-  elements.taskList.innerHTML = `<div class="empty-state"><p style="color: #dc3545;">加载失败：${escapeHtml(errorMsg)}</p></div>`;
+  elements.taskList.style.display = 'none';
   elements.emptyState.style.display = 'none';
+  elements.loadingState.style.display = 'none';
+  // 在任务列表容器中显示错误消息
+  elements.taskList.innerHTML = `<div class="empty-state"><p style="color: #dc3545;">加载失败：${escapeHtml(errorMsg)}</p></div>`;
+  elements.taskList.style.display = 'block';
 }
 
 // 显示加载状态
 function showLoading() {
-  elements.loadingState.style.display = 'flex';
+  elements.taskList.style.display = 'none';
   elements.emptyState.style.display = 'none';
+  elements.loadingState.style.display = 'flex';
 }
 
 // 隐藏加载状态
 function hideLoading() {
   elements.loadingState.style.display = 'none';
-  elements.emptyState.style.display = 'none';
 }
 
 // 删除选中任务
 async function deleteSelectedTask() {
   if (!selectedTaskId) {
-    alert('请先选择一个任务');
+    showToast('请先选择一个任务', 'error');
     return;
   }
-  
+
   if (!confirm(`确定要删除任务 ${selectedTaskId} 吗？`)) {
     return;
   }
-  
+
   try {
     const response = await fetch(`${getApiBaseUrl()}/api/tasks/${selectedTaskId}`, {
       method: 'DELETE'
     });
-    
+
     const result = await response.json();
-    
+
     if (result.success) {
-      alert('任务已删除');
+      showToast('任务已删除', 'success');
       selectedTaskId = null;
       await loadTaskList();
     } else {
-      alert(`删除失败：${result.error || '未知错误'}`);
+      showToast(`删除失败：${result.error || '未知错误'}`, 'error');
     }
   } catch (error) {
-    alert(`请求失败：${error.message}`);
+    showToast(`请求失败：${error.message}`, 'error');
   }
 }
 
@@ -620,6 +627,62 @@ async function checkServerStatus() {
     statusText.textContent = `服务器离线 (${config.host}:${config.port})`;
     isServerOnline = false;
   }
+
+  // 更新按钮状态
+  updateButtonStates();
+}
+
+// 更新按钮状态
+function updateButtonStates() {
+  if (isServerOnline) {
+    elements.btnAddTask.classList.remove('disabled');
+    elements.btnDeleteTask.classList.remove('disabled');
+    elements.btnAddTask.disabled = false;
+    elements.btnDeleteTask.disabled = false;
+  } else {
+    elements.btnAddTask.classList.add('disabled');
+    elements.btnDeleteTask.classList.add('disabled');
+    elements.btnAddTask.disabled = true;
+    elements.btnDeleteTask.disabled = true;
+  }
+}
+
+// 处理刷新按钮点击
+async function handleRefresh() {
+  // 如果服务器离线，先尝试连接
+  if (!isServerOnline) {
+    await checkServerStatus();
+    // 如果连接成功，继续刷新列表
+    if (isServerOnline) {
+      await loadTaskList();
+    } else {
+      showToast('服务器离线，无法刷新', 'error');
+    }
+  } else {
+    await loadTaskList();
+  }
+}
+
+// 显示提示气泡
+function showToast(message, type = 'success') {
+  const toast = elements.toast;
+  toast.textContent = message;
+  toast.className = 'toast';
+  
+  // 添加类型样式
+  if (type === 'success') {
+    toast.classList.add('success');
+  } else if (type === 'error') {
+    toast.classList.add('error');
+  }
+
+  // 显示气泡
+  toast.classList.add('show');
+
+  // 3 秒后自动隐藏
+  setTimeout(() => {
+    toast.classList.remove('show');
+  }, 3000);
 }
 
 // 启动自动刷新
