@@ -438,7 +438,7 @@ async def cache_get(cache_id: str):
 
 @app.route('/api/cache/<cache_id>', methods=['DELETE'])
 async def cache_delete(cache_id: str):
-    """删除指定缓存"""
+    """删除指定缓存，但如果缓存被任务列表中的任务引用则拒绝删除"""
     temp_dir = Path("temp_segments")
     cache_dir = temp_dir / cache_id
 
@@ -447,6 +447,15 @@ async def cache_delete(cache_id: str):
             "success": False,
             "error": f"缓存不存在：{cache_id}"
         }), 404
+
+    # 检查缓存是否被任务列表中的任务引用
+    task_cache_ids = get_task_cache_ids()
+    if cache_id in task_cache_ids:
+        return jsonify({
+            "success": False,
+            "error": f"缓存 {cache_id} 正在被任务列表中的任务使用，无法删除",
+            "code": "CACHE_IN_USE"
+        }), 409
 
     cache_manager_instance = CacheManager(
         temp_dir=str(temp_dir),
@@ -469,9 +478,23 @@ async def cache_delete(cache_id: str):
         }), 500
 
 
+def get_task_cache_ids() -> set[str]:
+    """获取任务列表中所有任务对应的缓存 ID"""
+    cache_ids = set()
+    for task in task_manager._tasks.values():
+        # 从任务配置中获取缓存目录名（URL 的 MD5 前 16 位）
+        cache_manager = CacheManager(
+            temp_dir=task.config.temp_dir,
+            url=task.config.url,
+            keep_cache=task.config.keep_cache
+        )
+        cache_ids.add(cache_manager.cache_dir.name)
+    return cache_ids
+
+
 @app.route('/api/cache/clear', methods=['POST'])
 async def cache_clear():
-    """清空所有缓存"""
+    """清空所有缓存，但保留任务列表中任务对应的缓存"""
     temp_dir = Path("temp_segments")
 
     if not temp_dir.exists():
@@ -481,10 +504,20 @@ async def cache_clear():
             "message": "暂无缓存"
         })
 
+    # 获取任务列表中任务对应的缓存 ID
+    task_cache_ids = get_task_cache_ids()
+
     cache_dirs = [d for d in temp_dir.iterdir() if d.is_dir()]
     deleted_count = 0
+    skipped_count = 0
 
     for cache_dir in cache_dirs:
+        # 跳过任务列表中的任务对应的缓存
+        if cache_dir.name in task_cache_ids:
+            logger.info(f"跳过缓存 {cache_dir.name}，因为任务列表中仍有任务引用它")
+            skipped_count += 1
+            continue
+
         cache_manager_instance = CacheManager(
             temp_dir=str(temp_dir),
             url="",
@@ -497,7 +530,8 @@ async def cache_clear():
     return jsonify({
         "success": True,
         "deleted_count": deleted_count,
-        "message": f"已删除 {deleted_count}/{len(cache_dirs)} 个缓存"
+        "skipped_count": skipped_count,
+        "message": f"已删除 {deleted_count}/{len(cache_dirs)} 个缓存，跳过 {skipped_count} 个（任务引用中）"
     })
 
 
