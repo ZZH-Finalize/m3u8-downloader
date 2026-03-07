@@ -13,7 +13,7 @@
                 "type": "shell",
                 "command": "python",
                 "args": [
-                    "start_server_async.py"
+                    "backend/server.py"
                 ],
                 "options": {
                     "cwd": "${workspaceFolder}"

@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-m3u8 视频下载工具 - 前端 CLI
-负责命令行参数解析和调用后端 API 服务
+m3u8 视频下载器 - API 测试工具
+用于测试后端 API 服务的命令行工具
 """
 
 import sys

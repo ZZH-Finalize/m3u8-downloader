@@ -14,7 +14,7 @@
 启动后端服务时可配置以下参数：
 
 ```bash
-python start_server_async.py [选项]
+python backend/server.py [选项]
 ```
 
 | 参数 | 默认值 | 说明 |
@@ -605,9 +605,9 @@ curl -X POST http://127.0.0.1:5000/api/download \
   }'
 ```
 
-使用前端 CLI 进行进度跟踪：
+使用测试工具进行进度跟踪：
 ```bash
-m3u8-downloader download https://example.com/video.m3u8 --trace
+python tools/test_cli.py download https://example.com/video.m3u8 --trace
 ```
 
 #### 3. 列出所有任务

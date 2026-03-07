@@ -4,6 +4,10 @@
 
 已将 m3u8 下载器后端从同步 Flask 实现重构为异步 Quart 实现，实现了前台任务（API 响应）与后台任务（下载、转码）的分离。
 
+**前端说明**: 
+- **官方前端**: Edge 浏览器插件（位于 `extension/` 目录）
+- **测试工具**: `tools/test_cli.py`（仅用于开发调试）
+
 ## 架构变更
 
 ### 之前（同步架构）
@@ -26,7 +30,6 @@
 | `backend/downloader.py` | 异步分片下载器（使用 aiohttp + asyncio） |
 | `backend/postprocessor.py` | 异步后处理器（使用 asyncio subprocess） |
 | `backend/task_manager.py` | 任务管理器（管理后台任务生命周期） |
-| `start_server_async.py` | 异步服务启动脚本 |
 | `requirements.txt` | 项目依赖 |
 
 ## 删除文件
@@ -81,7 +84,7 @@
 ### 1. 启动异步服务
 
 ```bash
-python start_server_async.py --host 0.0.0.0 --port 8080
+python backend/server.py --host 0.0.0.0 --port 8080
 ```
 
 ### 2. 提交下载任务

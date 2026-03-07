@@ -27,7 +27,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # 复制后端代码
 COPY backend/ ./backend/
-COPY start_server_async.py .
 
 # 创建下载目录和日志目录
 RUN mkdir -p /app/downloads /app/logs
@@ -44,4 +43,4 @@ COPY docker-entrypoint.sh /docker-entrypoint.sh
 RUN chmod +x /docker-entrypoint.sh
 
 ENTRYPOINT ["/docker-entrypoint.sh"]
-CMD ["python", "start_server_async.py"]
+CMD ["python", "backend/server.py"]

@@ -1,30 +1,37 @@
-# m3u8 下载器 - 前后端分离版本（异步架构）
+# m3u8 下载器（异步架构）
 
-本项目已将原始的 m3u8 下载器重构为前后端分离架构，采用异步实现。
+本项目已将原始的 m3u8 下载器重构为异步服务架构，提供 RESTful API。
 
-> **完整 API 文档**: 详见 [API.md](API.md)
+**前端**: Edge 浏览器插件（位于 `extension/` 目录）  
+**完整 API 文档**: 详见 [API.md](API.md)
 
 ## 项目结构
 
 ```
 m3u8-downloader/
-├── backend/                  # 后端服务
-│   ├── server.py            # Quart 异步 API 服务
-│   ├── task_manager.py      # 任务管理器（后台任务管理）
-│   ├── models.py            # 数据模型
-│   ├── logger.py            # 日志模块
-│   ├── cache_manager.py     # 缓存管理
-│   ├── parser.py            # 异步 m3u8 解析
-│   ├── downloader.py        # 异步分片下载
-│   └── postprocessor.py     # 异步后处理 (ffmpeg 合并)
+├── backend/                # 后端服务
+│   ├── server.py          # Quart 异步 API 服务
+│   ├── task_manager.py    # 任务管理器（后台任务管理）
+│   ├── models.py          # 数据模型
+│   ├── logger.py          # 日志模块
+│   ├── cache_manager.py   # 缓存管理
+│   ├── parser.py          # 异步 m3u8 解析
+│   ├── downloader.py      # 异步分片下载
+│   └── postprocessor.py   # 异步后处理 (ffmpeg 合并)
 │
-├── frontend/                # 前端 CLI
-│   └── cli.py              # 命令行接口
+├── extension/              # Edge 浏览器插件（正式前端）
+│   ├── manifest.json      # 插件配置文件
+│   ├── popup.html         # 插件页面
+│   ├── popup.js           # 逻辑脚本
+│   └── icons/             # 图标文件
 │
-├── start_server_async.py   # 启动异步后端服务
-├── start_server.py         # 启动同步后端服务（兼容）
-├── start_cli.py            # 启动前端 CLI
-└── requirements.txt        # 依赖列表
+├── tools/                  # 工具目录
+│   └── test_cli.py        # API 测试工具（开发调试用）
+│
+├── backend/server.py      # 启动异步后端服务
+├── docker/                 # Docker 相关配置
+├── requirements.txt       # 依赖列表
+└── README.md              # 使用说明
 ```
 
 ## 快速开始
@@ -38,7 +45,7 @@ pip install -r requirements.txt
 ### 2. 启动异步后端服务
 
 ```bash
-python start_server_async.py
+python backend/server.py
 ```
 
 后端服务默认监听 `127.0.0.1:5000`
@@ -54,50 +61,38 @@ python start_server_async.py
 示例：
 ```bash
 # 监听所有地址，端口 8080
-python start_server_async.py --host 0.0.0.0 --port 8080
+python backend/server.py --host 0.0.0.0 --port 8080
 
 # 设置默认 16 并发，DEBUG 日志
-python start_server_async.py --default-threads 16 --log-level DEBUG
+python backend/server.py --default-threads 16 --log-level DEBUG
 
 # 自定义日志目录
-python start_server_async.py --log-dir /var/log/m3u8-downloader
+python backend/server.py --log-dir /var/log/m3u8-downloader
 ```
 
-### 3. 使用前端 CLI 下载视频
+### 3. 使用 Edge 插件下载视频
 
-```bash
-python start_cli.py download <m3u8_url>
-```
+1. 打开 Edge 浏览器，访问 `edge://extensions/`
+2. 开启"开发人员模式"，点击"加载解压缩的扩展"
+3. 选择 `extension` 文件夹加载插件
+4. 确保后端服务已启动
+5. 点击浏览器工具栏中的插件图标，提交下载任务
 
-示例：
-```bash
-# 基本下载
-python start_cli.py download https://example.com/video.m3u8
-
-# 使用 8 个线程
-python start_cli.py download https://example.com/video.m3u8 -j 8
-
-# 指定输出文件名
-python start_cli.py download https://example.com/video.m3u8 --output my_video.mp4
-
-# 连接到远程 API 服务
-python start_cli.py download https://example.com/video.m3u8 --api-host 192.168.1.100 --api-port 5000
-```
+详细说明请查看 [extension/README.md](extension/README.md)。
 
 ### 4. 缓存管理
 
+通过 Edge 插件界面管理缓存，或使用测试工具：
+
 ```bash
 # 列出所有缓存
-python start_cli.py cache list
+python tools/test_cli.py cache list
 
 # 删除指定缓存
-python start_cli.py cache rm <cache_id>
+python tools/test_cli.py cache rm <cache_id>
 
 # 清空所有缓存
-python start_cli.py cache clear
-
-# 更新缓存元数据
-python start_cli.py cache update <m3u8_url>
+python tools/test_cli.py cache clear
 ```
 
 ## API 文档
@@ -176,5 +171,6 @@ curl -X DELETE http://127.0.0.1:5000/api/tasks/abc12345
 ## 注意事项
 
 1. 使用前请确保已安装 ffmpeg 并添加到 PATH
-2. 后端服务需要保持运行才能使用 CLI 工具
+2. 后端服务需要保持运行才能使用 Edge 插件
 3. 默认情况下，下载完成后会清理分片文件，保留元数据
+4. `tools/test_cli.py` 仅用于开发调试，生产环境请使用 Edge 插件
