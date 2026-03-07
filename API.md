@@ -30,15 +30,20 @@ python start_server_async.py [选项]
 
 ## API 端点概览
 
-### 异步任务 API
+### 下载任务 API
 
 | 端点 | 方法 | 说明 |
 |------|------|------|
 | `/api/download` | POST | 提交异步下载任务 |
-| `/api/download/sync` | POST | 同步下载（兼容旧 API） |
+
+### 任务管理 API
+
+| 端点 | 方法 | 说明 |
+|------|------|------|
 | `/api/tasks` | GET | 列出所有任务 |
+| `/api/task/list` | GET | 列出所有任务 ID 及进度（精简版） |
 | `/api/tasks/<id>` | GET | 查询任务状态 |
-| `/api/tasks/<id>` | DELETE | 取消任务 |
+| `/api/tasks/<id>` | DELETE | 取消/移除任务 |
 
 ### 缓存管理 API
 
@@ -157,30 +162,103 @@ Content-Type: application/json
 - 该接口是异步接口，提交任务后立即返回
 - 使用返回的 `task_id` 可通过 `/api/tasks/<task_id>` 查询进度
 - 下载过程包括：解析 m3u8、下载分片、合并为 MP4、清理分片
-```
-
-**响应字段**
-| 字段 | 类型 | 说明 |
-|------|------|------|
-| `success` | boolean | 是否成功 |
-| `output_path` | string | 输出文件路径（成功时） |
-| `segments_downloaded` | int | 成功下载的分片数 |
-| `total_segments` | int | 总分片数 |
-| `error` | string | 错误信息（失败时） |
 
 **状态码**
 - `200 OK`: 请求成功
 - `400 Bad Request`: 参数错误
 - `500 Internal Server Error`: 服务器错误
 
-**说明**
-- 该接口是同步接口，会等待下载完成才返回
-- 下载过程包括：解析 m3u8、下载分片、合并为 MP4、清理分片
-- 如果 `threads` 未提供，使用服务器启动时配置的 `--default-threads` 值
+---
+
+### 4. 列出所有任务
+
+获取所有任务的列表。
+
+**请求**
+```http
+GET /api/tasks
+```
+
+**响应**
+```json
+{
+    "success": true,
+    "tasks": [
+        {
+            "task_id": "abc12345",
+            "url": "https://example.com/video.m3u8",
+            "progress": {
+                "status": "completed",
+                "progress_percent": 100.0,
+                "current_step": "完成",
+                "segments_downloaded": 100,
+                "total_segments": 100,
+                "error": null,
+                "result": null,
+                "created_at": "2024-01-01T12:00:00",
+                "started_at": "2024-01-01T12:00:01",
+                "completed_at": "2024-01-01T12:05:00"
+            }
+        }
+    ],
+    "total_count": 1
+}
+```
+
+**进度字段**
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `status` | string | 任务状态 (pending/parsing/downloading/merging/completed/failed/cancelled) |
+| `progress_percent` | float | 进度百分比 (0-100) |
+| `current_step` | string | 当前步骤描述 |
+| `segments_downloaded` | int | 已下载分片数 |
+| `total_segments` | int | 总分片数 |
+| `error` | string | 错误信息（失败时） |
+| `result` | object | 最终结果（完成时） |
+| `created_at` | string | 任务创建时间 |
+| `started_at` | string | 任务开始时间 |
+| `completed_at` | string | 任务完成时间 |
+
+**状态码**
+- `200 OK`: 成功
 
 ---
 
-### 4. 查询任务状态
+### 6. 列出所有任务 ID 及进度（精简版）
+
+获取所有任务 ID 及下载进度（精简信息）。
+
+**请求**
+```http
+GET /api/task/list
+```
+
+**响应**
+```json
+{
+    "success": true,
+    "tasks": [
+        {
+            "task_id": "abc12345",
+            "segments_downloaded": 45,
+            "total_segments": 100
+        },
+        {
+            "task_id": "def67890",
+            "segments_downloaded": 100,
+            "total_segments": 100
+        }
+    ],
+    "total_count": 2
+}
+```
+
+**状态码**
+- `200 OK`: 成功
+
+---
+
+### 7. 查询任务状态
 
 获取指定任务的当前状态和进度。
 
@@ -215,64 +293,15 @@ GET /api/tasks/<task_id>
 }
 ```
 
-**进度字段**
-| 字段 | 类型 | 说明 |
-|------|------|------|
-| `status` | string | 任务状态 (pending/parsing/downloading/merging/completed/failed/cancelled) |
-| `progress_percent` | float | 进度百分比 (0-100) |
-| `current_step` | string | 当前步骤描述 |
-| `segments_downloaded` | int | 已下载分片数 |
-| `total_segments` | int | 总分片数 |
-| `error` | string | 错误信息（失败时） |
-| `result` | object | 最终结果（完成时） |
-| `created_at` | string | 任务创建时间 |
-| `started_at` | string | 任务开始时间 |
-| `completed_at` | string | 任务完成时间 |
-
 **状态码**
 - `200 OK`: 成功
 - `404 Not Found`: 任务不存在
 
 ---
 
-### 5. 列出所有任务
+### 8. 取消/移除任务
 
-获取所有任务的列表。
-
-**请求**
-```http
-GET /api/tasks
-```
-
-**响应**
-```json
-{
-    "success": true,
-    "tasks": [
-        {
-            "task_id": "abc12345",
-            "url": "https://example.com/video.m3u8",
-            "progress": {
-                "status": "completed",
-                "progress_percent": 100.0,
-                "current_step": "完成",
-                "segments_downloaded": 100,
-                "total_segments": 100
-            }
-        }
-    ],
-    "total_count": 1
-}
-```
-
-**状态码**
-- `200 OK`: 成功
-
----
-
-### 6. 取消任务
-
-取消正在执行的任务。
+取消正在执行的任务或移除已结束的任务。
 
 **请求**
 ```http
@@ -284,7 +313,7 @@ DELETE /api/tasks/<task_id>
 |------|------|------|
 | `task_id` | string | 任务 ID |
 
-**成功响应**
+**成功响应（取消任务）**
 ```json
 {
     "success": true,
@@ -292,13 +321,30 @@ DELETE /api/tasks/<task_id>
 }
 ```
 
+**成功响应（移除任务）**
+```json
+{
+    "success": true,
+    "message": "任务已移除：abc12345"
+}
+```
+
+**失败响应**
+```json
+{
+    "success": false,
+    "error": "任务不存在或已结束"
+}
+```
+
 **状态码**
-- `200 OK`: 取消成功
+- `200 OK`: 取消/移除成功
 - `400 Bad Request`: 任务不存在或已结束
+- `404 Not Found`: 任务不存在
 
 ---
 
-### 7. 列出所有缓存
+### 9. 列出所有缓存
 
 获取所有缓存的视频信息。
 
@@ -340,9 +386,12 @@ GET /api/cache/list
 | `caches[].created_at` | string | 创建时间（ISO 8601） |
 | `total_count` | int | 缓存总数 |
 
+**状态码**
+- `200 OK`: 成功
+
 ---
 
-### 5. 获取缓存详情
+### 10. 获取缓存详情
 
 获取指定缓存的详细信息。
 
@@ -394,7 +443,7 @@ GET /api/cache/<cache_id>
 
 ---
 
-### 6. 删除指定缓存
+### 11. 删除指定缓存
 
 删除单个缓存及其所有文件。
 
@@ -431,7 +480,7 @@ DELETE /api/cache/<cache_id>
 
 ---
 
-### 7. 清空所有缓存
+### 12. 清空所有缓存
 
 删除所有缓存。
 
@@ -456,9 +505,12 @@ POST /api/cache/clear
 | `deleted_count` | int | 删除的缓存数量 |
 | `message` | string | 结果消息 |
 
+**状态码**
+- `200 OK`: 成功
+
 ---
 
-### 8. 更新缓存元数据
+### 13. 更新缓存元数据
 
 重新下载 m3u8 文件并更新缓存元数据。
 
@@ -528,7 +580,7 @@ Content-Type: application/json
 | HTTP 状态码 | 说明 |
 |-------------|------|
 | `400 Bad Request` | 请求参数错误或缺少必要参数 |
-| `404 Not Found` | 资源不存在（如缓存不存在） |
+| `404 Not Found` | 资源不存在（如缓存不存在、任务不存在） |
 | `500 Internal Server Error` | 服务器内部错误 |
 
 ---
@@ -553,26 +605,56 @@ curl -X POST http://127.0.0.1:5000/api/download \
   }'
 ```
 
-#### 3. 列出缓存
+使用前端 CLI 进行进度跟踪：
+```bash
+m3u8-downloader download https://example.com/video.m3u8 --trace
+```
+
+#### 3. 列出所有任务
+```bash
+curl http://127.0.0.1:5000/api/tasks
+```
+
+#### 4. 查询任务状态
+```bash
+curl http://127.0.0.1:5000/api/tasks/abc12345
+```
+
+#### 5. 取消任务
+```bash
+curl -X DELETE http://127.0.0.1:5000/api/tasks/abc12345
+```
+
+#### 6. 列出缓存
 ```bash
 curl http://127.0.0.1:5000/api/cache/list
 ```
 
-#### 4. 删除缓存
+#### 7. 获取缓存详情
+```bash
+curl http://127.0.0.1:5000/api/cache/74a993fffd15ddbe
+```
+
+#### 8. 删除缓存
 ```bash
 curl -X DELETE http://127.0.0.1:5000/api/cache/74a993fffd15ddbe
 ```
 
-#### 5. 清空所有缓存
+#### 9. 清空所有缓存
 ```bash
 curl -X POST http://127.0.0.1:5000/api/cache/clear
 ```
 
-#### 6. 更新缓存元数据
+#### 10. 更新缓存元数据
 ```bash
 curl -X POST http://127.0.0.1:5000/api/cache/update \
   -H "Content-Type: application/json" \
   -d '{"url": "https://example.com/video.m3u8"}'
+```
+
+#### 11. 获取服务器配置
+```bash
+curl http://127.0.0.1:5000/api/config
 ```
 
 ### 使用 Python 调用
@@ -582,14 +664,24 @@ import requests
 
 API_BASE = "http://127.0.0.1:5000"
 
-# 下载视频
+# 下载视频（异步）
 response = requests.post(f"{API_BASE}/api/download", json={
     "url": "https://example.com/video.m3u8",
     "threads": 8,
     "output": "my_video.mp4"
 })
 result = response.json()
-print(result)
+task_id = result["task_id"]
+print(f"任务已提交：{task_id}")
+
+# 查询任务状态
+response = requests.get(f"{API_BASE}/api/tasks/{task_id}")
+task = response.json()
+print(f"进度：{task['progress']['progress_percent']}%")
+
+# 取消任务
+response = requests.delete(f"{API_BASE}/api/tasks/{task_id}")
+print(response.json())
 
 # 列出缓存
 response = requests.get(f"{API_BASE}/api/cache/list")
@@ -599,13 +691,21 @@ for cache in caches:
 
 # 删除缓存
 response = requests.delete(f"{API_BASE}/api/cache/{cache_id}")
+print(response.json())
+
+# 获取服务器配置
+response = requests.get(f"{API_BASE}/api/config")
+config = response.json()
+print(f"默认线程数：{config['default_threads']}")
 ```
 
 ---
 
 ## 注意事项
 
-1. **下载接口是同步的**：`/api/download` 会等待整个下载过程完成才返回，对于大文件可能需要较长时间。
+1. **下载接口**：
+   - `/api/download` 是异步接口，提交任务后立即返回 `task_id`
+   - 使用 `--trace` 选项可以在提交任务后通过短轮询（0.5 秒间隔）跟踪进度
 
 2. **缓存 ID 生成规则**：缓存 ID 是 m3u8 URL 的 MD5 哈希值的前 16 位字符。
 
@@ -621,3 +721,12 @@ response = requests.delete(f"{API_BASE}/api/cache/{cache_id}")
    - 默认日志目录：`logs/`
    - 默认日志文件：`logs/m3u8-downloader.log`
    - 日志文件会自动轮转，最大 10MB，保留 5 个文件
+
+6. **任务状态**：
+   - `pending`: 等待执行
+   - `parsing`: 解析 m3u8 中
+   - `downloading`: 下载分片中
+   - `merging`: 合并分片中
+   - `completed`: 已完成
+   - `failed`: 失败
+   - `cancelled`: 已取消
