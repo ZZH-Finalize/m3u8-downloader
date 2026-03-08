@@ -141,6 +141,10 @@ class MetaData:
             created_at=data.get("created_at", "")
         )
 
+    def get_downloaded_count(self) -> int:
+        """获取已下载分片数量"""
+        return bin(self.downloaded_mask).count("1")
+
 
 @dataclass
 class DownloadResult:

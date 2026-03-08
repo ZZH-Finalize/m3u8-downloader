@@ -31,14 +31,18 @@ from logger import get_logger, LOG_FILE, setup_logger
 
 # 全局配置（通过命令行参数设置）
 server_config = {
-    "default_threads": 8,  # 默认下载并发数
-    "ffmpeg_path": "ffmpeg",  # ffmpeg 路径
+    "default_threads": 8,
+    "ffmpeg_path": "ffmpeg",
 }
 
 logger = None  # 在 main() 中初始化
 
 app = Quart(__name__)
-app = cors(app)  # 启用 CORS 支持
+app = cors(app)
+
+# ===== 常量 =====
+DEFAULT_TEMP_DIR = "temp_segments"
+DEFAULT_OUTPUT_DIR = "output"
 
 
 # ===== API 端点 =====
@@ -63,121 +67,94 @@ async def get_server_config():
     })
 
 
+def _validate_download_request(data: dict) -> tuple[bool, Optional[dict]]:
+    """验证下载请求参数，返回 (是否有效，错误响应)"""
+    if not data or 'url' not in data:
+        return False, {"success": False, "error": "缺少必要参数：url"}
+    if data.get('threads') is not None and data.get('threads') < 1:
+        return False, {"success": False, "error": "线程数必须大于 0"}
+    return True, None
+
+
+def _create_task_from_request(data: dict) -> tuple:
+    """从请求数据创建任务"""
+    return task_manager.create_task(
+        url=data['url'],
+        threads=data.get('threads') if data.get('threads') is not None else server_config.get("default_threads", 8),
+        output_dir=DEFAULT_OUTPUT_DIR,
+        temp_dir=DEFAULT_TEMP_DIR,
+        max_rounds=data.get('max_rounds', 5),
+        keep_cache=data.get('keep_cache', False),
+        output_name=data.get('output'),
+        ffmpeg_path=server_config.get("ffmpeg_path", "ffmpeg")
+    )
+
+
+def _handle_existing_task(task) -> Optional[dict]:
+    """处理已存在的任务，返回响应或 None 表示可以继续"""
+    status = task.progress.status
+
+    if status == TaskStatus.FAILED:
+        # 重启失败任务
+        logger.info(f"发现失败任务 {task.task_id}，重新启动")
+        task.progress.status = TaskStatus.PENDING
+        task.progress.error = None
+        task.progress.progress_percent = 0.0
+        task.progress.current_step = "等待重启"
+        task._cancel_flag = False
+        task_manager.start_task(task.task_id)
+        return {
+            "success": True,
+            "task_id": task.task_id,
+            "status": "pending",
+            "message": "失败任务已重启"
+        }
+
+    if status in [TaskStatus.PENDING, TaskStatus.PARSING, TaskStatus.DOWNLOADING, TaskStatus.MERGING]:
+        logger.info(f"任务已存在且正在运行：{task.task_id}, 状态={status}")
+        return {
+            "success": False,
+            "error": f"任务已存在且正在运行：{task.task_id}",
+            "existing_task_id": task.task_id,
+            "existing_status": status.value
+        }
+
+    logger.info(f"任务已存在：{task.task_id}, 状态={status}")
+    return {
+        "success": False,
+        "error": f"任务已存在：{task.task_id}",
+        "existing_task_id": task.task_id,
+        "existing_status": status.value
+    }
+
+
 @app.route('/api/download', methods=['POST'])
 async def download():
-    """
-    提交下载任务（异步）
-
-    请求体:
-    {
-        "url": "https://example.com/video.m3u8",
-        "threads": 4,          // 可选，默认使用服务器配置的 default_threads
-        "output": "video.mp4",  // 可选，默认 video.mp4
-        "max_rounds": 5,        // 可选，默认 5
-        "keep_cache": false,    // 可选，默认 false
-        "debug": false          // 可选，默认 false
-    }
-
-    返回:
-    {
-        "success": true,
-        "task_id": "abc12345",  // 任务 ID，用于查询进度
-        "status": "pending"
-    }
-    """
-    global logger
-
+    """提交下载任务（异步）"""
     try:
         data = await request.get_json()
 
-        if not data or 'url' not in data:
-            return jsonify({
-                "success": False,
-                "error": "缺少必要参数：url"
-            }), 400
+        valid, error_response = _validate_download_request(data)
+        if not valid:
+            return jsonify(error_response), 400
 
-        url = data['url']
-        threads = data.get('threads')
-        output_name = data.get('output')
-        max_rounds = data.get('max_rounds', 5)
-        keep_cache = data.get('keep_cache', False)
-        debug = data.get('debug', False)
+        if data.get('debug'):
+            for module in ["api_server", "parser", "downloader", "postprocessor"]:
+                get_logger(module, debug=True)
 
-        # 验证参数
-        if threads is not None and threads < 1:
-            return jsonify({
-                "success": False,
-                "error": "线程数必须大于 0"
-            }), 400
+        logger.info(f"收到下载请求：URL={data['url']}")
 
-        # 启用调试模式
-        if debug:
-            get_logger("api_server", debug=True)
-            get_logger("parser", debug=True)
-            get_logger("downloader", debug=True)
-            get_logger("postprocessor", debug=True)
-
-        logger.info(f"收到下载请求：URL={url}")
-
-        # 检查是否存在相同 URL 的任务
-        existing_task = task_manager.find_task_by_url(url)
-
+        existing_task = task_manager.find_task_by_url(data['url'])
         if existing_task:
-            # 任务已存在
-            if existing_task.progress.status == TaskStatus.FAILED:
-                # 失败任务：重新启动
-                logger.info(f"发现失败任务 {existing_task.task_id}，重新启动")
-                # 重置任务状态
-                existing_task.progress.status = TaskStatus.PENDING
-                existing_task.progress.error = None
-                existing_task.progress.progress_percent = 0.0
-                existing_task.progress.current_step = "等待重启"
-                existing_task._cancel_flag = False
-                # 启动任务
-                task_manager.start_task(existing_task.task_id)
-                return jsonify({
-                    "success": True,
-                    "task_id": existing_task.task_id,
-                    "status": "pending",
-                    "message": "失败任务已重启"
-                })
-            elif existing_task.progress.status in [TaskStatus.PENDING, TaskStatus.PARSING, TaskStatus.DOWNLOADING, TaskStatus.MERGING]:
-                # 运行中任务
-                logger.info(f"任务已存在且正在运行：{existing_task.task_id}, 状态={existing_task.progress.status}")
-                return jsonify({
-                    "success": False,
-                    "error": f"任务已存在且正在运行：{existing_task.task_id}",
-                    "existing_task_id": existing_task.task_id,
-                    "existing_status": existing_task.progress.status.value
-                }), 409
-            else:
-                # 已完成或已取消
-                logger.info(f"任务已存在：{existing_task.task_id}, 状态={existing_task.progress.status}")
-                return jsonify({
-                    "success": False,
-                    "error": f"任务已存在：{existing_task.task_id}",
-                    "existing_task_id": existing_task.task_id,
-                    "existing_status": existing_task.progress.status.value
-                }), 409
+            response = _handle_existing_task(existing_task)
+            if response:
+                status_code = 409 if response.get('success') is False else 200
+                return jsonify(response), status_code
 
-        # 创建新任务
-        task = task_manager.create_task(
-            url=url,
-            threads=threads if threads is not None else server_config.get("default_threads", 8),
-            output_dir="output",
-            temp_dir="temp_segments",
-            max_rounds=max_rounds,
-            keep_cache=keep_cache,
-            output_name=output_name,
-            ffmpeg_path=server_config.get("ffmpeg_path", "ffmpeg")
-        )
-
-        # 启动后台任务
+        task = _create_task_from_request(data)
         task_manager.start_task(task.task_id)
-
         logger.info(f"任务已创建：{task.task_id}")
 
-        # 立即返回任务 ID，不等待下载完成
         return jsonify({
             "success": True,
             "task_id": task.task_id,
@@ -187,58 +164,22 @@ async def download():
 
     except Exception as e:
         logger.error(f"处理下载请求时发生错误：{e}")
-        return jsonify({
-            "success": False,
-            "error": str(e)
-        }), 500
+        return jsonify({"success": False, "error": str(e)}), 500
 
 
 @app.route('/api/download/sync', methods=['POST'])
 async def download_sync():
-    """
-    同步下载（等待完成）- 用于兼容旧 API
-
-    请求体与 /api/download 相同
-
-    返回:
-    {
-        "success": true/false,
-        "output_path": "...",
-        "segments_downloaded": 100,
-        "total_segments": 100,
-        "error": "..."
-    }
-    """
+    """同步下载（等待完成）- 用于兼容旧 API"""
     try:
         data = await request.get_json()
 
-        if not data or 'url' not in data:
-            return jsonify({
-                "success": False,
-                "error": "缺少必要参数：url"
-            }), 400
+        valid, error_response = _validate_download_request(data)
+        if not valid:
+            return jsonify(error_response), 400
 
-        url = data['url']
-        threads = data.get('threads')
-        output_name = data.get('output')
-        max_rounds = data.get('max_rounds', 5)
-        keep_cache = data.get('keep_cache', False)
+        logger.info(f"收到同步下载请求：URL={data['url']}")
 
-        logger.info(f"收到同步下载请求：URL={url}")
-
-        # 创建任务
-        task = task_manager.create_task(
-            url=url,
-            threads=threads if threads is not None else server_config.get("default_threads", 8),
-            output_dir="output",
-            temp_dir="temp_segments",
-            max_rounds=max_rounds,
-            keep_cache=keep_cache,
-            output_name=output_name,
-            ffmpeg_path=server_config.get("ffmpeg_path", "ffmpeg")
-        )
-
-        # 等待任务完成
+        task = _create_task_from_request(data)
         result = await task_manager.execute_task(task)
 
         if result.get("success"):
@@ -248,45 +189,21 @@ async def download_sync():
 
     except Exception as e:
         logger.error(f"处理同步下载请求时发生错误：{e}")
-        return jsonify({
-            "success": False,
-            "error": str(e)
-        }), 500
+        return jsonify({"success": False, "error": str(e)}), 500
 
 
 @app.route('/api/tasks', methods=['GET'])
 async def list_tasks():
     """列出所有任务"""
     tasks = task_manager.list_tasks()
-    return jsonify({
-        "success": True,
-        "tasks": tasks,
-        "total_count": len(tasks)
-    })
+    return jsonify({"success": True, "tasks": tasks, "total_count": len(tasks)})
 
 
 @app.route('/api/task/list', methods=['GET'])
 async def list_task_ids():
-    """
-    列出所有任务 ID 及下载进度
-    
-    返回:
-    {
-        "success": true,
-        "tasks": [
-            {
-                "task_id": "abc12345",
-                "segments_downloaded": 45,
-                "total_segments": 100
-            },
-            ...
-        ],
-        "total_count": 2
-    }
-    """
+    """列出所有任务 ID 及下载进度"""
     tasks = task_manager.list_tasks()
-    
-    # 提取精简信息
+
     task_list = [
         {
             "task_id": task["task_id"],
@@ -295,131 +212,85 @@ async def list_task_ids():
         }
         for task in tasks
     ]
-    
-    return jsonify({
-        "success": True,
-        "tasks": task_list,
-        "total_count": len(task_list)
-    })
+
+    return jsonify({"success": True, "tasks": task_list, "total_count": len(task_list)})
 
 
 @app.route('/api/tasks/<task_id>', methods=['GET'])
 async def get_task_status(task_id: str):
     """获取任务状态"""
     result = task_manager.get_task_status(task_id)
-
     if result:
         return jsonify(result)
-    else:
-        return jsonify({
-            "success": False,
-            "error": "任务不存在"
-        }), 404
+    return jsonify({"success": False, "error": "任务不存在"}), 404
 
 
 @app.route('/api/tasks/<task_id>', methods=['DELETE'])
 async def delete_task(task_id: str):
-    """
-    删除任务
-    - 如果任务正在运行：先取消任务，再从列表中移除
-    - 如果任务已结束（完成/失败/取消）：直接从列表中移除
-    """
+    """删除任务"""
     task = task_manager.get_task(task_id)
-    
     if not task:
-        return jsonify({
-            "success": False,
-            "error": "任务不存在"
-        }), 404
-    
-    # 如果任务正在运行，先取消
+        return jsonify({"success": False, "error": "任务不存在"}), 404
+
     if task.progress.status not in [TaskStatus.COMPLETED, TaskStatus.FAILED, TaskStatus.CANCELLED]:
         task_manager.cancel_task(task_id)
-    
-    # 移除任务
+
     task_manager.remove_task(task_id)
-    
-    return jsonify({
-        "success": True,
-        "message": f"任务已删除：{task_id}"
-    })
+    return jsonify({"success": True, "message": f"任务已删除：{task_id}"})
 
 
 # ===== 缓存管理 API =====
 
+def _get_cache_manager(cache_dir: Path, keep_cache: bool = True) -> CacheManager:
+    """创建 CacheManager 实例"""
+    cm = CacheManager(temp_dir=str(cache_dir.parent), url="", keep_cache=keep_cache)
+    cm.cache_dir = cache_dir
+    return cm
+
+
+def _build_cache_info(cache_dir: Path) -> dict:
+    """构建缓存信息字典"""
+    cm = _get_cache_manager(cache_dir)
+    cache_info = cm.get_cache_info()
+    metadata = cm.load_metadata()
+
+    return {
+        "id": cache_dir.name,
+        "url": metadata.url if metadata else "未知",
+        "segment_count": cache_info["segment_count"],
+        "m3u8_count": cache_info["m3u8_count"],
+        "total_size": cache_info["total_size"],
+        "total_size_mb": round(cache_info["total_size"] / (1024 * 1024), 2),
+        "created_at": metadata.created_at if metadata else None
+    }
+
+
 @app.route('/api/cache/list', methods=['GET'])
 async def cache_list():
-    """
-    列出所有缓存
-    """
-    temp_dir = Path("temp_segments")
+    """列出所有缓存"""
+    temp_dir = Path(DEFAULT_TEMP_DIR)
 
     if not temp_dir.exists():
-        return jsonify({
-            "success": True,
-            "caches": [],
-            "total_count": 0
-        })
+        return jsonify({"success": True, "caches": [], "total_count": 0})
 
-    cache_dirs = [d for d in temp_dir.iterdir() if d.is_dir()]
-    caches = []
+    caches = [_build_cache_info(d) for d in temp_dir.iterdir() if d.is_dir()]
 
-    for cache_dir in cache_dirs:
-        cache_manager = CacheManager(
-            temp_dir=str(temp_dir),
-            url="",
-            keep_cache=True
-        )
-        cache_manager.cache_dir = cache_dir
-
-        cache_info = cache_manager.get_cache_info()
-        metadata = cache_manager.load_metadata()
-
-        cache_data = {
-            "id": cache_dir.name,
-            "url": metadata.url if metadata else "未知",
-            "segment_count": cache_info["segment_count"],
-            "m3u8_count": cache_info["m3u8_count"],
-            "total_size": cache_info["total_size"],
-            "total_size_mb": round(cache_info["total_size"] / (1024 * 1024), 2),
-            "created_at": metadata.created_at if metadata else None
-        }
-        caches.append(cache_data)
-
-    return jsonify({
-        "success": True,
-        "caches": caches,
-        "total_count": len(caches)
-    })
+    return jsonify({"success": True, "caches": caches, "total_count": len(caches)})
 
 
 @app.route('/api/cache/<cache_id>', methods=['GET'])
 async def cache_get(cache_id: str):
     """获取指定缓存的详细信息"""
-    temp_dir = Path("temp_segments")
-    cache_dir = temp_dir / cache_id
+    cache_dir = Path(DEFAULT_TEMP_DIR) / cache_id
 
     if not cache_dir.exists():
-        return jsonify({
-            "success": False,
-            "error": f"缓存不存在：{cache_id}"
-        }), 404
+        return jsonify({"success": False, "error": f"缓存不存在：{cache_id}"}), 404
 
-    cache_manager_instance = CacheManager(
-        temp_dir=str(temp_dir),
-        url="",
-        keep_cache=True
-    )
-    cache_manager_instance.cache_dir = cache_dir
+    cm = _get_cache_manager(cache_dir)
+    cache_info = cm.get_cache_info()
+    metadata = cm.load_metadata()
 
-    cache_info = cache_manager_instance.get_cache_info()
-    metadata = cache_manager_instance.load_metadata()
-
-    downloaded_count = 0
-    is_complete = False
-    if metadata:
-        downloaded_count = bin(metadata.downloaded_mask).count("1")
-        is_complete = metadata.is_complete
+    downloaded_count = metadata.get_downloaded_count() if metadata else 0
 
     return jsonify({
         "success": True,
@@ -433,162 +304,108 @@ async def cache_get(cache_id: str):
             "total_size_mb": round(cache_info["total_size"] / (1024 * 1024), 2),
             "created_at": metadata.created_at if metadata else None,
             "downloaded_count": downloaded_count,
-            "is_complete": is_complete
+            "is_complete": metadata.is_complete if metadata else False
         }
     })
-
 
 @app.route('/api/cache/<cache_id>', methods=['DELETE'])
 async def cache_delete(cache_id: str):
     """删除指定缓存，但如果缓存被任务列表中的任务引用则拒绝删除"""
-    temp_dir = Path("temp_segments")
-    cache_dir = temp_dir / cache_id
+    cache_dir = Path(DEFAULT_TEMP_DIR) / cache_id
 
     if not cache_dir.exists():
-        return jsonify({
-            "success": False,
-            "error": f"缓存不存在：{cache_id}"
-        }), 404
+        return jsonify({"success": False, "error": f"缓存不存在：{cache_id}"}), 404
 
-    # 检查缓存是否被任务列表中的任务引用
-    task_cache_ids = get_task_cache_ids()
-    if cache_id in task_cache_ids:
+    if cache_dir.name in _get_task_cache_ids():
         return jsonify({
             "success": False,
             "error": f"缓存 {cache_id} 正在被任务列表中的任务使用，无法删除",
             "code": "CACHE_IN_USE"
         }), 409
 
-    cache_manager_instance = CacheManager(
-        temp_dir=str(temp_dir),
-        url="",
-        keep_cache=False
-    )
-    cache_manager_instance.cache_dir = cache_dir
-
-    success = cache_manager_instance.clear_cache()
+    cm = _get_cache_manager(cache_dir, keep_cache=False)
+    success = cm.clear_cache()
 
     if success:
-        return jsonify({
-            "success": True,
-            "message": f"缓存已删除：{cache_id}"
-        })
-    else:
-        return jsonify({
-            "success": False,
-            "error": f"删除失败：{cache_id}"
-        }), 500
+        return jsonify({"success": True, "message": f"缓存已删除：{cache_id}"})
+    return jsonify({"success": False, "error": f"删除失败：{cache_id}"}), 500
 
 
-def get_task_cache_ids() -> set[str]:
+def _get_task_cache_ids() -> set[str]:
     """获取任务列表中所有任务对应的缓存 ID"""
-    cache_ids = set()
-    for task in task_manager._tasks.values():
-        # 从任务配置中获取缓存目录名（URL 的 MD5 前 16 位）
-        cache_manager = CacheManager(
+    return {
+        CacheManager(
             temp_dir=task.config.temp_dir,
             url=task.config.url,
             keep_cache=task.config.keep_cache
-        )
-        cache_ids.add(cache_manager.cache_dir.name)
-    return cache_ids
+        ).cache_dir.name
+        for task in task_manager._tasks.values()
+    }
 
 
 @app.route('/api/cache/clear', methods=['POST'])
 async def cache_clear():
     """清空所有缓存，但保留任务列表中任务对应的缓存"""
-    temp_dir = Path("temp_segments")
+    temp_dir = Path(DEFAULT_TEMP_DIR)
 
     if not temp_dir.exists():
-        return jsonify({
-            "success": True,
-            "deleted_count": 0,
-            "message": "暂无缓存"
-        })
+        return jsonify({"success": True, "deleted_count": 0, "message": "暂无缓存"})
 
-    # 获取任务列表中任务对应的缓存 ID
-    task_cache_ids = get_task_cache_ids()
-
-    cache_dirs = [d for d in temp_dir.iterdir() if d.is_dir()]
+    task_cache_ids = _get_task_cache_ids()
     deleted_count = 0
     skipped_count = 0
 
-    for cache_dir in cache_dirs:
-        # 跳过任务列表中的任务对应的缓存
+    for cache_dir in temp_dir.iterdir():
+        if not cache_dir.is_dir():
+            continue
+
         if cache_dir.name in task_cache_ids:
             logger.info(f"跳过缓存 {cache_dir.name}，因为任务列表中仍有任务引用它")
             skipped_count += 1
             continue
 
-        cache_manager_instance = CacheManager(
-            temp_dir=str(temp_dir),
-            url="",
-            keep_cache=False
-        )
-        cache_manager_instance.cache_dir = cache_dir
-        if cache_manager_instance.clear_cache():
+        if _get_cache_manager(cache_dir, keep_cache=False).clear_cache():
             deleted_count += 1
 
     return jsonify({
         "success": True,
         "deleted_count": deleted_count,
         "skipped_count": skipped_count,
-        "message": f"已删除 {deleted_count}/{len(cache_dirs)} 个缓存，跳过 {skipped_count} 个（任务引用中）"
+        "message": f"已删除 {deleted_count} 个缓存，跳过 {skipped_count} 个（任务引用中）"
     })
 
 
 @app.route('/api/cache/update', methods=['POST'])
 async def cache_update():
-    """
-    更新缓存元数据
-
-    请求体:
-    {
-        "url": "https://example.com/video.m3u8"
-    }
-    """
-    global logger
-
+    """更新缓存元数据"""
     try:
         data = await request.get_json()
 
         if not data or 'url' not in data:
-            return jsonify({
-                "success": False,
-                "error": "缺少必要参数：url"
-            }), 400
+            return jsonify({"success": False, "error": "缺少必要参数：url"}), 400
 
         url = data['url']
+        logger.info(f"正在更新缓存元数据：{url}")
 
         config = AppConfig(
             url=url,
             threads=1,
-            temp_dir="temp_segments",
-            output_dir="output",
+            temp_dir=DEFAULT_TEMP_DIR,
+            output_dir=DEFAULT_OUTPUT_DIR,
             max_download_rounds=1,
             keep_cache=True,
             ffmpeg_path=server_config.get("ffmpeg_path", "ffmpeg"),
         )
 
-        cache_manager_instance = CacheManager(
-            temp_dir=config.temp_dir,
-            url=config.url,
-            keep_cache=config.keep_cache
-        )
-
-        cache_manager_instance.init_cache()
-
-        logger.info(f"正在更新缓存元数据：{url}")
+        cm = CacheManager(temp_dir=config.temp_dir, url=config.url, keep_cache=config.keep_cache)
+        cm.init_cache()
 
         from parser import M3u8Parser
-        parser = M3u8Parser(config, cache_manager_instance)
+        parser = M3u8Parser(config, cm)
         parse_result = await parser.parse(force_refresh=True)
 
         if not parse_result.success:
-            return jsonify({
-                "success": False,
-                "error": f"解析失败：{parse_result.error}"
-            }), 500
+            return jsonify({"success": False, "error": f"解析失败：{parse_result.error}"}), 500
 
         return jsonify({
             "success": True,
@@ -598,10 +415,7 @@ async def cache_update():
 
     except Exception as e:
         logger.error(f"更新缓存元数据时发生错误：{e}")
-        return jsonify({
-            "success": False,
-            "error": str(e)
-        }), 500
+        return jsonify({"success": False, "error": str(e)}), 500
 
 
 def parse_args():

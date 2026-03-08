@@ -143,13 +143,10 @@ class SegmentDownloader:
         existing_results: dict[int, DownloadResult]
     ) -> list[int]:
         """获取未下载成功的分片索引"""
-        missing = []
-        for seg in segments:
-            if seg.index not in existing_results:
-                missing.append(seg.index)
-            elif not existing_results[seg.index].success:
-                missing.append(seg.index)
-        return missing
+        return [
+            seg.index for seg in segments
+            if seg.index not in existing_results or not existing_results[seg.index].success
+        ]
 
     async def _download_round(
         self,
@@ -162,11 +159,10 @@ class SegmentDownloader:
             1 for seg in segments_to_download
             if self.cache_manager.segment_exists(seg.filename)
         )
+
+        to_download = len(segments_to_download) - existing_count
         if existing_count:
             logger.info(f"发现 {existing_count} 个已存在的分片，将跳过下载")
-
-        # 需要下载的分片数
-        to_download = len(segments_to_download) - existing_count
         if to_download > 0:
             logger.info(f"开始下载 {to_download} 个分片，并发数：{self.threads}...")
         else:
@@ -178,7 +174,7 @@ class SegmentDownloader:
         # 创建 aiohttp session
         timeout = aiohttp.ClientTimeout(total=self.timeout)
         connector = aiohttp.TCPConnector(limit=self.threads)
-        
+
         async with aiohttp.ClientSession(
             timeout=timeout,
             connector=connector,
@@ -193,12 +189,13 @@ class SegmentDownloader:
             results = await asyncio.gather(*tasks, return_exceptions=True)
 
         # 处理结果
-        download_results = []
+        download_results = [
+            r for r in results
+            if not isinstance(r, Exception)
+        ]
         for result in results:
             if isinstance(result, Exception):
                 logger.error(f"下载任务异常：{result}")
-            else:
-                download_results.append(result)
 
         # 按索引排序
         download_results.sort(key=lambda r: r.segment.index)
@@ -210,24 +207,14 @@ class SegmentDownloader:
             metadata = self.cache_manager.update_metadata_downloaded_mask()
             if metadata:
                 self.config.metadata = metadata
-            logger.debug(f"元数据 downloaded_mask 已更新")
 
     async def _download_segment(
         self,
         segment: SegmentInfo,
         total: int
     ) -> DownloadResult:
-        """
-        异步下载单个分片
-
-        Args:
-            segment: 分片信息
-            total: 总分片数
-
-        Returns:
-            下载结果
-        """
-        async with self._semaphore:  # 控制并发
+        """异步下载单个分片"""
+        async with self._semaphore:
             local_path = self.cache_manager.get_segment_path(segment.filename)
 
             # 检查是否已下载（断点续传）
@@ -235,7 +222,6 @@ class SegmentDownloader:
                 logger.info(
                     f"[{segment.index + 1}/{total}] 跳过：{segment.filename} (已存在)"
                 )
-                # 更新进度
                 self._completed_count += 1
                 self._notify_progress()
                 return DownloadResult(
@@ -253,14 +239,11 @@ class SegmentDownloader:
                         response.raise_for_status()
                         content = await response.read()
 
-                    # 写入缓存
                     self.cache_manager.save_segment(segment.filename, content)
-
                     logger.info(
                         f"[{segment.index + 1}/{total}] 完成：{segment.filename}"
                     )
 
-                    # 更新进度
                     self._completed_count += 1
                     self._notify_progress()
 
@@ -278,14 +261,13 @@ class SegmentDownloader:
                         f"{segment.filename} - {error_msg}"
                     )
                     if attempt < self.retry_count - 1:
-                        await asyncio.sleep(0.5 * (attempt + 1))  # 指数退避
+                        await asyncio.sleep(0.5 * (attempt + 1))
                         continue
 
             logger.error(
                 f"[{segment.index + 1}/{total}] 失败：{segment.filename} - {error_msg}"
             )
 
-            # 更新进度（失败也计数）
             self._completed_count += 1
             self._notify_progress()
 
@@ -306,18 +288,16 @@ class SegmentDownloader:
     ) -> list[Path]:
         """
         从下载结果中提取成功下载的路径
-        顺序与 metadata.filenames 一致（即 m3u8 中的顺序）
+        顺序与 metadata.filenames 一致
 
         注意：调用此方法前应确保所有分片都已下载成功
         """
-        # 构建 filename 到 Path 的映射
         path_map = {
             r.segment.filename: r.local_path
             for r in results
             if r.success and r.local_path
         }
 
-        # 按 metadata.filenames 的顺序返回路径
         return [
             path_map[filename]
             for filename in self.config.metadata.filenames

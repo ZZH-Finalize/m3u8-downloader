@@ -99,6 +99,11 @@ class CacheManager:
         m3u8_path = self.cache_dir / self.MASTER_M3U8_FILENAME
         return m3u8_path.exists()
 
+    def _get_resolution_filename(self, resolution: tuple[int, int]) -> str:
+        """根据分辨率获取 m3u8 文件名"""
+        height = resolution[1] if resolution else 0
+        return self.RESOLUTION_M3U8_PATTERN.format(height)
+
     def save_resolution_m3u8(self, resolution: tuple[int, int], content: str) -> Path:
         """
         保存指定分辨率的 m3u8 文件
@@ -111,9 +116,7 @@ class CacheManager:
             保存的文件路径
         """
         self.init_cache()
-        # 使用高度作为文件名（如 1080p.m3u8）
-        height = resolution[1] if resolution else 0
-        filename = self.RESOLUTION_M3U8_PATTERN.format(height)
+        filename = self._get_resolution_filename(resolution)
         m3u8_path = self.cache_dir / filename
         with open(m3u8_path, "w", encoding="utf-8") as f:
             f.write(content)
@@ -130,9 +133,7 @@ class CacheManager:
         Returns:
             m3u8 文件内容，如果不存在则返回 None
         """
-        height = resolution[1] if resolution else 0
-        filename = self.RESOLUTION_M3U8_PATTERN.format(height)
-        m3u8_path = self.cache_dir / filename
+        m3u8_path = self.cache_dir / self._get_resolution_filename(resolution)
         if m3u8_path.exists():
             with open(m3u8_path, "r", encoding="utf-8") as f:
                 content = f.read()
@@ -150,9 +151,7 @@ class CacheManager:
         Returns:
             是否存在
         """
-        height = resolution[1] if resolution else 0
-        filename = self.RESOLUTION_M3U8_PATTERN.format(height)
-        m3u8_path = self.cache_dir / filename
+        m3u8_path = self.cache_dir / self._get_resolution_filename(resolution)
         return m3u8_path.exists()
 
     def get_segment_path(self, filename: str) -> Path:
@@ -217,13 +216,11 @@ class CacheManager:
         if not self.cache_dir.exists():
             return []
 
-        # 排除 m3u8 文件和临时文件
-        segments = []
-        for f in self.cache_dir.iterdir():
-            if f.is_file() and f.suffix in [".ts", ".m4s", ".mp4"] and not f.name.endswith(".tmp"):
-                segments.append(f)
-
-        # 按文件名排序
+        valid_suffixes = {".ts", ".m4s", ".mp4"}
+        segments = [
+            f for f in self.cache_dir.iterdir()
+            if f.is_file() and f.suffix in valid_suffixes and not f.name.endswith(".tmp")
+        ]
         segments.sort(key=lambda p: p.name)
         return segments
 
@@ -237,12 +234,7 @@ class CacheManager:
         if not self.cache_dir.exists():
             return []
 
-        m3u8_files = []
-        for f in self.cache_dir.iterdir():
-            if f.is_file() and f.suffix == ".m3u8":
-                m3u8_files.append(f)
-
-        return m3u8_files
+        return [f for f in self.cache_dir.iterdir() if f.is_file() and f.suffix == ".m3u8"]
 
     def clear_segments(self) -> bool:
         """
@@ -261,14 +253,12 @@ class CacheManager:
             logger.debug("缓存目录不存在，无需清理")
             return True
 
-        try:
-            # 从元数据获取分片文件列表
-            metadata = self.load_metadata()
-            if not metadata:
-                logger.warning("元数据不存在，无法清理分片文件")
-                return False
+        metadata = self.load_metadata()
+        if not metadata:
+            logger.warning("元数据不存在，无法清理分片文件")
+            return False
 
-            # 根据元数据中的文件列表删除分片
+        try:
             deleted_count = 0
             for filename in metadata.filenames:
                 segment_path = self.cache_dir / filename
@@ -377,12 +367,7 @@ class CacheManager:
         return metadata_path.exists()
 
     def get_cache_info(self) -> dict:
-        """
-        获取缓存信息
-
-        Returns:
-            缓存信息字典
-        """
+        """获取缓存信息"""
         if not self.cache_dir.exists():
             return {
                 "exists": False,

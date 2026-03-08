@@ -48,95 +48,26 @@ class M3u8Parser:
         url = self.config.url
         logger.info(f"正在解析：{url}")
 
-        # 首先检查是否有元数据缓存（除非强制刷新）
-        if not force_refresh and self.cache_manager.metadata_exists():
-            logger.info("检测到元数据缓存，尝试从缓存加载")
-            metadata = self.cache_manager.load_metadata()
-            if metadata and metadata.url == url:
-                logger.info(f"元数据匹配，使用缓存的解析结果（共 {len(metadata.filenames)} 个分片）")
+        # 检查元数据缓存
+        if not force_refresh:
+            cached_result = self._try_load_from_metadata_cache()
+            if cached_result:
+                return cached_result
 
-                # 更新 downloaded_mask（根据实际文件状态）
-                metadata = self.cache_manager.update_metadata_downloaded_mask()
-
-                # 从元数据重建 SegmentInfo 列表
-                segments = self._rebuild_segments_from_metadata(metadata)
-
-                # 保存元数据到配置
-                self.config.metadata = metadata
-                # 保存 m3u8 源文件内容到配置（空字符串，因为不需要）
-                self.config.m3u8_content = ""
-
-                downloaded_count = bin(metadata.downloaded_mask).count("1")
-                logger.info(f"已下载 {downloaded_count}/{len(metadata.filenames)} 个分片")
-
-                return ParseResult(
-                    segments=segments,
-                    base_url=metadata.base_url,
-                    success=True
-                )
-            else:
-                logger.info("元数据 URL 不匹配，将重新解析")
-
-        # 检查缓存中是否有主 m3u8 文件（除非强制刷新）
-        if not force_refresh and self.cache_manager.master_m3u8_exists():
-            logger.info("检测到主 m3u8 缓存，从缓存加载")
-            content = self.cache_manager.load_master_m3u8()
-        else:
-            # 从网络获取
-            logger.info("从网络获取 m3u8 文件")
-            content = await self._fetch_url(url)
-            if content is None:
-                return ParseResult(
-                    segments=[],
-                    base_url="",
-                    success=False,
-                    error=f"无法获取 m3u8 文件：{url}"
-                )
-            # 保存到缓存
-            self.cache_manager.save_master_m3u8(content)
+        # 获取 m3u8 内容
+        content = await self._get_m3u8_content(force_refresh)
+        if content is None:
+            return ParseResult(
+                segments=[],
+                base_url="",
+                success=False,
+                error=f"无法获取 m3u8 文件：{url}"
+            )
 
         base_url = self._get_base_url(url)
 
         try:
-            playlist = m3u8.loads(content)
-            playlist.base_uri = url
-
-            # 检查是否是 Master Playlist（包含多个子 playlist）
-            if playlist.playlists:
-                logger.info(f"检测到 Master Playlist，包含 {len(playlist.playlists)} 个子列表")
-
-                # 选择最高分辨率的子 playlist
-                best_playlist = max(playlist.playlists, key=lambda p: p.stream_info.resolution or (0, 0))
-                best_resolution = best_playlist.stream_info.resolution
-                logger.info(f"选择最高分辨率：{best_resolution}")
-
-                sub_url = best_playlist.absolute_uri
-
-                # 检查缓存中是否有该分辨率的 m3u8 文件（除非强制刷新）
-                if not force_refresh and self.cache_manager.resolution_m3u8_exists(best_resolution):
-                    logger.info(f"检测到分辨率 {best_resolution} 的 m3u8 缓存，从缓存加载")
-                    sub_content = self.cache_manager.load_resolution_m3u8(best_resolution)
-                else:
-                    # 从网络获取
-                    logger.info(f"从网络获取子 playlist: {sub_url}")
-                    sub_content = await self._fetch_url(sub_url)
-                    if sub_content is None:
-                        return ParseResult(
-                            segments=[],
-                            base_url=base_url,
-                            success=False,
-                            error=f"无法获取子 m3u8 文件：{sub_url}"
-                        )
-                    # 保存到缓存
-                    self.cache_manager.save_resolution_m3u8(best_resolution, sub_content)
-
-                # 缓存所有其他分辨率的子 playlist
-                await self._cache_other_resolutions(playlist, best_resolution)
-
-                playlist = m3u8.loads(sub_content)
-                playlist.base_uri = sub_url
-
-            segments = self._extract_segments(playlist, base_url)
+            segments = await self._parse_playlist(content, base_url, force_refresh)
         except Exception as e:
             logger.error(f"m3u8 解析失败 - {e}")
             return ParseResult(
@@ -178,25 +109,125 @@ class M3u8Parser:
             success=True
         )
 
+    def _try_load_from_metadata_cache(self) -> Optional[ParseResult]:
+        """尝试从元数据缓存加载，成功则返回 ParseResult"""
+        if not self.cache_manager.metadata_exists():
+            return None
+
+        logger.info("检测到元数据缓存，尝试从缓存加载")
+        metadata = self.cache_manager.load_metadata()
+        if metadata and metadata.url == self.config.url:
+            logger.info(f"元数据匹配，使用缓存的解析结果（共 {len(metadata.filenames)} 个分片）")
+
+            # 更新 downloaded_mask（根据实际文件状态）
+            self.cache_manager.update_metadata_downloaded_mask()
+
+            # 从元数据重建 SegmentInfo 列表
+            segments = self._rebuild_segments_from_metadata(metadata)
+
+            # 保存元数据到配置
+            self.config.metadata = metadata
+            self.config.m3u8_content = ""
+
+            downloaded_count = metadata.get_downloaded_count()
+            logger.info(f"已下载 {downloaded_count}/{len(metadata.filenames)} 个分片")
+
+            return ParseResult(
+                segments=segments,
+                base_url=metadata.base_url,
+                success=True
+            )
+        else:
+            logger.info("元数据 URL 不匹配，将重新解析")
+        return None
+
+    async def _get_m3u8_content(self, force_refresh: bool) -> Optional[str]:
+        """获取 m3u8 内容（从缓存或网络）"""
+        if not force_refresh and self.cache_manager.master_m3u8_exists():
+            logger.info("检测到主 m3u8 缓存，从缓存加载")
+            return self.cache_manager.load_master_m3u8()
+
+        logger.info("从网络获取 m3u8 文件")
+        content = await self._fetch_url(self.config.url)
+        if content:
+            self.cache_manager.save_master_m3u8(content)
+        return content
+
+    async def _parse_playlist(
+        self,
+        content: str,
+        base_url: str,
+        force_refresh: bool
+    ) -> list[SegmentInfo]:
+        """解析 m3u8 内容，处理 Master Playlist 和子 Playlist"""
+        playlist = m3u8.loads(content)
+        playlist.base_uri = self.config.url
+
+        # 检查是否是 Master Playlist
+        if not playlist.playlists:
+            return self._extract_segments(playlist, base_url)
+
+        logger.info(f"检测到 Master Playlist，包含 {len(playlist.playlists)} 个子列表")
+
+        # 选择最高分辨率的子 playlist
+        best_playlist = max(
+            playlist.playlists,
+            key=lambda p: p.stream_info.resolution or (0, 0)
+        )
+        best_resolution = best_playlist.stream_info.resolution
+        logger.info(f"选择最高分辨率：{best_resolution}")
+
+        sub_content = await self._get_sub_playlist_content(
+            best_playlist, best_resolution, force_refresh
+        )
+        if sub_content is None:
+            raise Exception(f"无法获取子 m3u8 文件：{best_playlist.absolute_uri}")
+
+        # 缓存其他分辨率
+        await self._cache_other_resolutions(playlist, best_resolution)
+
+        sub_playlist = m3u8.loads(sub_content)
+        sub_playlist.base_uri = best_playlist.absolute_uri
+        return self._extract_segments(sub_playlist, base_url)
+
+    async def _get_sub_playlist_content(
+        self,
+        playlist: m3u8.Playlist,
+        resolution: Tuple[int, int],
+        force_refresh: bool
+    ) -> Optional[str]:
+        """获取子 playlist 内容（从缓存或网络）"""
+        if not force_refresh and self.cache_manager.resolution_m3u8_exists(resolution):
+            logger.info(f"检测到分辨率 {resolution} 的 m3u8 缓存，从缓存加载")
+            return self.cache_manager.load_resolution_m3u8(resolution)
+
+        logger.info(f"从网络获取子 playlist: {playlist.absolute_uri}")
+        content = await self._fetch_url(playlist.absolute_uri)
+        if content:
+            self.cache_manager.save_resolution_m3u8(resolution, content)
+        return content
+
     async def _cache_other_resolutions(
         self,
         playlist: m3u8.M3U8,
         best_resolution: Tuple[int, int]
     ) -> None:
         """异步缓存其他分辨率的子 playlist"""
-        tasks = []
-        for sub_playlist in playlist.playlists:
-            resolution = sub_playlist.stream_info.resolution
-            if resolution and resolution != best_resolution:
-                sub_playlist_url = sub_playlist.absolute_uri
-                if not self.cache_manager.resolution_m3u8_exists(resolution):
-                    tasks.append(self._cache_resolution(sub_playlist_url, resolution))
+        tasks = [
+            self._fetch_and_cache_resolution(sub_playlist)
+            for sub_playlist in playlist.playlists
+            if sub_playlist.stream_info.resolution
+            and sub_playlist.stream_info.resolution != best_resolution
+            and not self.cache_manager.resolution_m3u8_exists(sub_playlist.stream_info.resolution)
+        ]
 
         if tasks:
             await asyncio.gather(*tasks, return_exceptions=True)
 
-    async def _cache_resolution(self, url: str, resolution: Tuple[int, int]) -> None:
-        """缓存单个分辨率的 m3u8 文件"""
+    async def _fetch_and_cache_resolution(self, sub_playlist: m3u8.Playlist) -> None:
+        """获取并缓存单个分辨率的 m3u8 文件"""
+        resolution = sub_playlist.stream_info.resolution
+        url = sub_playlist.absolute_uri
         logger.info(f"缓存分辨率 {resolution} 的 m3u8 文件：{url}")
         try:
             content = await self._fetch_url(url)
@@ -232,10 +263,8 @@ class M3u8Parser:
 
     def _save_metadata(self, url: str, base_url: str, segments: list[SegmentInfo]) -> None:
         """保存元数据到缓存"""
-        # 只保存文件名列表
         filenames = [seg.filename for seg in segments]
 
-        # 检查分片数量是否超过上限
         if len(filenames) > MetaData.MAX_SEGMENTS:
             logger.error(
                 f"分片数量 {len(filenames)} 超过上限 {MetaData.MAX_SEGMENTS}，"

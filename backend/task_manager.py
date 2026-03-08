@@ -203,15 +203,7 @@ class TaskManager:
         ]
 
     def cancel_task(self, task_id: str) -> bool:
-        """
-        取消任务
-
-        Args:
-            task_id: 任务 ID
-
-        Returns:
-            是否成功取消
-        """
+        """取消任务"""
         task = self._tasks.get(task_id)
         if not task:
             return False
@@ -225,7 +217,6 @@ class TaskManager:
         task.progress.completed_at = datetime.now().isoformat()
         task.progress.error = "用户取消"
 
-        # 取消对应的 future
         if task_id in self._task_futures:
             self._task_futures[task_id].cancel()
 
@@ -233,56 +224,33 @@ class TaskManager:
         return True
 
     def remove_task(self, task_id: str) -> bool:
-        """
-        移除任务（从任务列表中删除）
-        仅当任务已结束（完成、失败或取消）时才能移除
-
-        Args:
-            task_id: 任务 ID
-
-        Returns:
-            是否成功移除
-        """
+        """移除已结束的任务"""
         task = self._tasks.get(task_id)
         if not task:
             return False
-        
-        # 检查任务是否已结束
+
         if task.progress.status not in [TaskStatus.COMPLETED, TaskStatus.FAILED, TaskStatus.CANCELLED]:
             logger.warning(f"任务 {task_id} 仍在运行中，无法移除")
             return False
-        
-        if task_id in self._tasks:
-            del self._tasks[task_id]
-            if task_id in self._task_futures:
-                del self._task_futures[task_id]
-            logger.info(f"任务已移除：{task_id}")
-            return True
-        return False
+
+        del self._tasks[task_id]
+        self._task_futures.pop(task_id, None)
+        logger.info(f"任务已移除：{task_id}")
+        return True
 
     async def execute_task(self, task: DownloadTask) -> dict:
-        """
-        执行下载任务（异步）
-
-        Args:
-            task: 任务对象
-
-        Returns:
-            执行结果
-        """
+        """执行下载任务（异步）"""
         task_id = task.task_id
         config = task.config
         progress = task.progress
 
         try:
-            # 更新状态
             progress.started_at = datetime.now().isoformat()
             progress.status = TaskStatus.PARSING
             progress.current_step = "解析 m3u8..."
 
             logger.info(f"开始执行任务：{task_id}")
 
-            # 创建缓存管理器
             cache_manager = CacheManager(
                 temp_dir=config.temp_dir,
                 url=config.url,
@@ -290,85 +258,25 @@ class TaskManager:
             )
 
             # 1. 解析 m3u8
-            logger.info(f"[{task_id}] 开始解析 m3u8...")
-            parser = M3u8Parser(config, cache_manager)
-            parse_result = await parser.parse()
-
-            if task._cancel_flag:
+            parse_result = await self._execute_parse(task_id, config, cache_manager)
+            if not parse_result:
                 return self._create_cancelled_result(task)
-
-            if not parse_result.success:
-                raise Exception(f"解析失败：{parse_result.error}")
-
-            config.parsed_segments = parse_result.segments
-            config.metadata = cache_manager.load_metadata()
-            logger.info(f"[{task_id}] 解析成功，共 {len(config.parsed_segments)} 个分片")
-
-            # 更新进度
-            progress.total_segments = len(config.parsed_segments)
-            progress.progress_percent = 10.0
 
             # 2. 下载分片
-            logger.info(f"[{task_id}] 开始下载分片...")
-            progress.status = TaskStatus.DOWNLOADING
-            progress.current_step = "下载分片中..."
-
-            # 定义进度回调函数
-            def on_progress(completed: int, total: int):
-                progress.segments_downloaded = completed
-                progress.progress_percent = 10.0 + (70.0 * completed / total)  # 10% -> 80%
-                logger.debug(f"[{task_id}] 下载进度：{completed}/{total} ({progress.progress_percent:.1f}%)")
-
-            downloader = SegmentDownloader(config, cache_manager, progress_callback=on_progress)
-            download_results = await downloader.download_all(config.parsed_segments)
-
-            if task._cancel_flag:
+            download_success = await self._execute_download(
+                task_id, task, config, cache_manager, progress
+            )
+            if not download_success:
                 return self._create_cancelled_result(task)
-
-            # 统计结果
-            success_count = sum(1 for r in download_results if r.success)
-            failed_count = sum(1 for r in download_results if not r.success)
-
-            if failed_count > 0:
-                logger.warning(f"[{task_id}] {failed_count} 个分片下载失败")
-
-            if success_count == 0:
-                raise Exception("没有成功下载任何分片")
-
-            logger.info(f"[{task_id}] 下载完成：{success_count}/{len(config.parsed_segments)} 个分片")
-
-            # 检查是否所有分片都下载成功
-            if failed_count > 0:
-                # 分片未全部下载成功，标记任务失败，保留现有分片
-                error_msg = f"分片未全部下载成功：{failed_count}/{len(config.parsed_segments)} 个失败"
-                logger.error(f"[{task_id}] {error_msg}，任务失败，保留已下载分片")
-                raise Exception(error_msg)
-
-            # 保存下载路径
-            config.downloaded_paths = downloader.get_success_paths(download_results)
-
-            # 更新进度
-            progress.segments_downloaded = success_count
-            progress.progress_percent = 80.0
 
             # 3. 合并分片
-            logger.info(f"[{task_id}] 开始合并分片...")
-            progress.status = TaskStatus.MERGING
-            progress.current_step = "合并分片中..."
-
-            postprocessor = MediaPostprocessor(config)
-            merge_result = await postprocessor.merge(config.downloaded_paths)
-
-            if task._cancel_flag:
+            merge_success = await self._execute_merge(
+                task_id, task, config, cache_manager, progress
+            )
+            if not merge_success:
                 return self._create_cancelled_result(task)
 
-            if not merge_result.success:
-                raise Exception(f"合并失败：{merge_result.error}")
-
-            # 合并成功后清理分片文件
-            cache_manager.clear_segments()
-
-            # 更新进度
+            # 完成
             progress.status = TaskStatus.COMPLETED
             progress.progress_percent = 100.0
             progress.current_step = "完成"
@@ -377,8 +285,8 @@ class TaskManager:
             result = {
                 "success": True,
                 "output_path": config.output_file,
-                "segments_downloaded": success_count,
-                "total_segments": len(config.parsed_segments)
+                "segments_downloaded": progress.segments_downloaded,
+                "total_segments": progress.total_segments
             }
             progress.result = result
 
@@ -394,34 +302,114 @@ class TaskManager:
             progress.status = TaskStatus.FAILED
             progress.error = str(e)
             progress.completed_at = datetime.now().isoformat()
+            return {"success": False, "error": str(e)}
 
-            return {
-                "success": False,
-                "error": str(e)
-            }
+    async def _execute_parse(
+        self,
+        task_id: str,
+        config: AppConfig,
+        cache_manager: CacheManager
+    ) -> bool:
+        """执行解析阶段，返回是否成功"""
+        logger.info(f"[{task_id}] 开始解析 m3u8...")
+        parser = M3u8Parser(config, cache_manager)
+        parse_result = await parser.parse()
+
+        if getattr(parser, '_cancel_flag', False) or config.metadata and hasattr(config.metadata, '_cancel_flag'):
+            return False
+
+        if not parse_result.success:
+            raise Exception(f"解析失败：{parse_result.error}")
+
+        config.parsed_segments = parse_result.segments
+        config.metadata = cache_manager.load_metadata()
+        logger.info(f"[{task_id}] 解析成功，共 {len(config.parsed_segments)} 个分片")
+
+        return True
+
+    async def _execute_download(
+        self,
+        task_id: str,
+        task: DownloadTask,
+        config: AppConfig,
+        cache_manager: CacheManager,
+        progress: TaskProgress
+    ) -> bool:
+        """执行下载阶段，返回是否成功"""
+        progress.status = TaskStatus.DOWNLOADING
+        progress.current_step = "下载分片中..."
+        progress.total_segments = len(config.parsed_segments)
+        progress.progress_percent = 10.0
+
+        def on_progress(completed: int, total: int):
+            progress.segments_downloaded = completed
+            progress.progress_percent = 10.0 + (70.0 * completed / total)
+
+        logger.info(f"[{task_id}] 开始下载分片...")
+        downloader = SegmentDownloader(config, cache_manager, progress_callback=on_progress)
+        download_results = await downloader.download_all(config.parsed_segments)
+
+        if task._cancel_flag:
+            return False
+
+        success_count = sum(1 for r in download_results if r.success)
+        failed_count = len(download_results) - success_count
+
+        if failed_count > 0:
+            logger.warning(f"[{task_id}] {failed_count} 个分片下载失败")
+
+        if success_count == 0:
+            raise Exception("没有成功下载任何分片")
+
+        if failed_count > 0:
+            error_msg = f"分片未全部下载成功：{failed_count}/{len(config.parsed_segments)} 个失败"
+            logger.error(f"[{task_id}] {error_msg}，任务失败，保留已下载分片")
+            raise Exception(error_msg)
+
+        config.downloaded_paths = downloader.get_success_paths(download_results)
+        progress.segments_downloaded = success_count
+        progress.progress_percent = 80.0
+
+        logger.info(f"[{task_id}] 下载完成：{success_count}/{len(config.parsed_segments)} 个分片")
+        return True
+
+    async def _execute_merge(
+        self,
+        task_id: str,
+        task: DownloadTask,
+        config: AppConfig,
+        cache_manager: CacheManager,
+        progress: TaskProgress
+    ) -> bool:
+        """执行合并阶段，返回是否成功"""
+        progress.status = TaskStatus.MERGING
+        progress.current_step = "合并分片中..."
+
+        logger.info(f"[{task_id}] 开始合并分片...")
+        postprocessor = MediaPostprocessor(config)
+        merge_result = await postprocessor.merge(config.downloaded_paths)
+
+        if task._cancel_flag:
+            return False
+
+        if not merge_result.success:
+            raise Exception(f"合并失败：{merge_result.error}")
+
+        cache_manager.clear_segments()
+        return True
 
     def start_task(self, task_id: str) -> bool:
-        """
-        启动后台任务
-
-        Args:
-            task_id: 任务 ID
-
-        Returns:
-            是否成功启动
-        """
+        """启动后台任务"""
         task = self._tasks.get(task_id)
         if not task:
             return False
 
-        # 获取当前运行的事件循环（而不是使用预先设置的 loop）
         try:
             loop = asyncio.get_running_loop()
         except RuntimeError:
             logger.error("没有正在运行的事件循环")
             return False
 
-        # 创建协程任务
         future = loop.create_task(self.execute_task(task))
         self._task_futures[task_id] = future
 
@@ -430,11 +418,7 @@ class TaskManager:
 
     def _create_cancelled_result(self, task: DownloadTask) -> dict:
         """创建取消结果"""
-        return {
-            "success": False,
-            "error": "任务已取消",
-            "cancelled": True
-        }
+        return {"success": False, "error": "任务已取消", "cancelled": True}
 
 
 # 全局任务管理器实例
