@@ -47,7 +47,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   setupEventListeners();
   await checkServerStatus();  // 先检查服务器状态
   await loadTaskList();  // 再加载任务列表
-  startAutoRefresh();
+  // startAutoRefresh 已在 checkServerStatus 中根据状态自动处理
 });
 
 // 加载配置
@@ -256,7 +256,12 @@ async function loadTaskList() {
     }
   } catch (error) {
     console.error('加载任务列表失败:', error);
-    renderErrorState(error.message);
+    // 请求失败意味着服务器离线，停止自动刷新
+    isServerOnline = false;
+    updateButtonStates();
+    updateServerStatusUI();
+    stopAutoRefresh();
+    renderOfflineState();
   }
 }
 
@@ -639,6 +644,7 @@ async function deleteSelectedTask() {
 async function checkServerStatus() {
   const statusIndicator = document.querySelector('.status-indicator');
   const statusText = document.querySelector('.status-text');
+  const wasOnline = isServerOnline;
 
   try {
     const response = await fetch(`${getApiBaseUrl()}/health`);
@@ -648,6 +654,10 @@ async function checkServerStatus() {
       statusIndicator.className = 'status-indicator online';
       statusText.textContent = `服务器在线 (${config.host}:${config.port})`;
       isServerOnline = true;
+      // 从离线恢复在线时，启动自动刷新
+      if (!wasOnline) {
+        startAutoRefresh();
+      }
     } else {
       throw new Error('服务状态异常');
     }
@@ -655,10 +665,28 @@ async function checkServerStatus() {
     statusIndicator.className = 'status-indicator offline';
     statusText.textContent = `服务器离线 (${config.host}:${config.port})`;
     isServerOnline = false;
+    // 从在线变为离线时，停止自动刷新
+    if (wasOnline) {
+      stopAutoRefresh();
+    }
   }
 
   // 更新按钮状态
   updateButtonStates();
+}
+
+// 更新服务器状态 UI（不改变在线状态）
+function updateServerStatusUI() {
+  const statusIndicator = document.querySelector('.status-indicator');
+  const statusText = document.querySelector('.status-text');
+  
+  if (isServerOnline) {
+    statusIndicator.className = 'status-indicator online';
+    statusText.textContent = `服务器在线 (${config.host}:${config.port})`;
+  } else {
+    statusIndicator.className = 'status-indicator offline';
+    statusText.textContent = `服务器离线 (${config.host}:${config.port})`;
+  }
 }
 
 // 更新按钮状态
@@ -688,7 +716,15 @@ async function handleRefresh() {
       showToast('服务器离线，无法刷新', 'error');
     }
   } else {
-    await loadTaskList();
+    // 服务器在线时，先检查状态再刷新
+    const wasOnline = isServerOnline;
+    await checkServerStatus();
+    if (isServerOnline) {
+      await loadTaskList();
+    } else {
+      // 从在线变为离线，已停止自动刷新
+      showToast('服务器已离线，已停止自动刷新', 'error');
+    }
   }
 }
 
@@ -714,19 +750,31 @@ function showToast(message, type = 'success') {
   }, 3000);
 }
 
-// 启动自动刷新
+// 启动自动刷新（只在服务器在线时启动）
 function startAutoRefresh() {
-  if (config.autoRefresh > 0) {
-    autoRefreshTimer = setInterval(loadTaskList, config.autoRefresh);
+  stopAutoRefresh();  // 先停止之前的定时器
+  if (config.autoRefresh > 0 && isServerOnline) {
+    autoRefreshTimer = setInterval(() => {
+      // 自动刷新时如果检测到离线，停止定时器
+      loadTaskList().then(() => {
+        if (!isServerOnline && autoRefreshTimer) {
+          stopAutoRefresh();
+        }
+      });
+    }, config.autoRefresh);
+  }
+}
+
+// 停止自动刷新
+function stopAutoRefresh() {
+  if (autoRefreshTimer) {
+    clearInterval(autoRefreshTimer);
+    autoRefreshTimer = null;
   }
 }
 
 // 重启自动刷新
 function restartAutoRefresh() {
-  if (autoRefreshTimer) {
-    clearInterval(autoRefreshTimer);
-    autoRefreshTimer = null;
-  }
   startAutoRefresh();
 }
 
