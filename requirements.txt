@@ -12,6 +12,3 @@ m3u8>=5.0.0
 
 # 同步 HTTP 客户端（备用）
 requests>=2.31.0
-
-# CORS 支持（Flask 版本，用于兼容）
-flask-cors>=4.0.0

@@ -1,10 +1,7 @@
-# m3u8-downloader 后端服务 Docker 镜像
-FROM python:3.12-slim
+# m3u8-downloader 后端服务 Docker 镜像（优化版）
+FROM python:3.12-alpine
 
-# 设置应用目录
-WORKDIR /app
-
-# 设置环境变量（Python 优化 + 服务器配置 + PYTHONPATH）
+# 设置环境变量
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
@@ -19,21 +16,20 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     TEMP_DIR=/data/temp_segments \
     OUTPUT_DIR=/output
 
-VOLUME ["/output", "/data"]
+# 安装 ffmpeg（Alpine 的 apk 包管理更精简）
+RUN apk add --no-cache ffmpeg
 
-# 安装 ffmpeg 和 Python 依赖（合并指令减少层数）
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends ffmpeg && \
-    apt-get clean && \
-    rm -rf /var/lib/apt/lists/* && \
-    pip install --no-cache-dir --upgrade pip && \
-    mkdir -p /data/logs "$OUTPUT_DIR" "$TEMP_DIR"
+# 创建必要目录
+RUN mkdir -p /app /data/logs /output /data/temp_segments
 
-# 复制并安装依赖（利用 Docker 缓存层）
+# 设置工作目录
+WORKDIR /app
+
+# 复制并安装 Python 依赖
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# 复制应用代码（backend 内容直接放到 /app）
+# 复制应用代码
 COPY backend/ ./
 COPY docker-entrypoint.sh /docker-entrypoint.sh
 RUN chmod +x /docker-entrypoint.sh
@@ -45,8 +41,8 @@ EXPOSE 6900
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:6900/health')" || exit 1
 
-# 切换工作目录到根目录
+# 切换到根目录工作
 WORKDIR /
 
-ENTRYPOINT ["/docker-entrypoint.sh"]
+ENTRYPOINT ["sh", "/docker-entrypoint.sh"]
 CMD ["python", "/app/server.py"]
