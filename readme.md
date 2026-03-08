@@ -29,7 +29,6 @@ m3u8-downloader/
 │
 ├── docker/                 # Docker 相关配置
 ├── requirements.txt       # 依赖列表
-├── README_ARCH.md         # 服务端架构说明（本文件）
 └── API.md                 # 完整 API 文档
 ```
 
@@ -148,75 +147,131 @@ curl -X DELETE http://127.0.0.1:6900/api/tasks/abc12345
 
 ## Docker 部署
 
-### 环境变量配置
+Docker 镜像地址：[https://hub.docker.com/r/zzhfinalize/m3u8-download-server](https://hub.docker.com/r/zzhfinalize/m3u8-download-server)
 
-后端服务支持以下环境变量：
+### Docker Compose 部署（推荐）
 
-| 变量名 | 默认值 | 说明 |
-|--------|--------|------|
-| `SERVER_HOST` | `0.0.0.0` | 监听地址 IP |
-| `SERVER_PORT` | `6900` | 监听端口 |
-| `DEFAULT_THREADS` | `8` | 默认下载并发数 |
-| `LOG_LEVEL` | `INFO` | 日志级别 |
-| `LOG_DIR` | `logs` | 日志目录 |
-| `DEBUG` | `false` | 启用调试模式 |
-| `FFMPEG_PATH` | `ffmpeg` | ffmpeg 路径 |
+#### 1. 创建 docker-compose.yml 文件
 
-### FFmpeg 配置
-
-镜像**不自带 ffmpeg**，需要宿主机提供：
+在项目根目录下创建 `docker-compose.yml` 文件：
 
 ```yaml
-volumes:
-  - /usr/bin/ffmpeg:/usr/bin/ffmpeg:ro
-environment:
-  - FFMPEG_PATH=/usr/bin/ffmpeg
+version: '3.8'
+
+services:
+  m3u8-downloader:
+    image: zzhfinalize/m3u8-download-server:latest
+    container_name: m3u8-downloader
+    ports:
+      - "6900:6900"
+    volumes:
+      # 输出目录：下载的视频文件
+      - ./output:/output
+      # 数据目录：日志和临时分片
+      - ./data:/data
+    environment:
+      # 服务器配置
+      - SERVER_HOST=0.0.0.0
+      - SERVER_PORT=6900
+      - DEFAULT_THREADS=8
+      # 日志配置
+      - LOG_LEVEL=INFO
+      - DEBUG=false
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:6900/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
 ```
 
-### 方式一：使用 Docker Compose（推荐）
+#### 2. 启动服务
 
 ```bash
-# 构建并启动
-docker-compose up -d --build
+# 启动容器
+docker-compose up -d
 
 # 查看日志
 docker-compose logs -f
 
 # 停止服务
 docker-compose down
+
+# 停止并删除容器和网络
+docker-compose down -v
 ```
 
-### 方式二：使用 Docker 命令
+### 环境变量配置
 
-```bash
-# 构建镜像
-docker build -t m3u8-downloader .
+Docker 容器支持以下环境变量：
 
-# 运行容器
-docker run -d \
-  --name m3u8-downloader \
-  -p 6900:6900 \
-  -v $(pwd)/downloads:/app/downloads \
-  -v $(pwd)/logs:/app/logs \
-  m3u8-downloader
-```
+| 变量名 | 默认值 | 说明 |
+|--------|--------|------|
+| `SERVER_HOST` | `0.0.0.0` | 监听地址 IP |
+| `SERVER_PORT` | `6900` | 监听端口 |
+| `DEFAULT_THREADS` | `8` | 默认下载并发数 |
+| `LOG_LEVEL` | `INFO` | 日志级别 (DEBUG/INFO/WARNING/ERROR/CRITICAL) |
+| `LOG_DIR` | `/data/logs` | 日志目录 |
+| `DEBUG` | `false` | 启用调试模式 |
+| `TEMP_DIR` | `/data/temp_segments` | 临时分片目录 |
+| `OUTPUT_DIR` | `/output` | 输出目录 |
 
-### 目录挂载
+**注意**：Docker 镜像已内置 ffmpeg，无需额外配置。
+
+### 目录挂载说明
 
 | 容器路径 | 宿主机路径 | 说明 |
 |----------|------------|------|
-| `/app/downloads` | `./downloads` | 下载的视频文件 |
-| `/app/logs` | `./logs` | 日志文件 |
+| `/output` | `./output` | 下载完成的视频文件 |
+| `/data` | `./data` | 日志 (`/data/logs`) 和临时分片 (`/data/temp_segments`) |
+
+### Python 原生部署
+
+如果不想使用 Docker，也可以直接运行 Python 脚本启动服务：
+
+```bash
+# 1. 安装依赖
+pip install -r requirements.txt
+
+# 2. 启动后端服务
+python backend/server.py
+```
+
+**提示**: 如果你使用 VS Code 打开项目，`m3u8.code-workspace` 文件中已经配置了名为 **"启动后端服务"** 的任务，可以直接通过 `Ctrl+Shift+P` → `Tasks: Run Task` → `启动后端服务` 来启动服务。
+
+可选参数：
+- `--host`: 监听地址 IP (默认：127.0.0.1)
+- `--port`: 监听端口 (默认：6900)
+- `--default-threads`: 默认下载并发数 (默认：8)
+- `--log-level`: 日志级别 DEBUG|INFO|WARNING|ERROR|CRITICAL (默认：INFO)
+- `--log-dir`: 日志目录 (默认：logs)
+- `--debug`: 启用调试模式（等同于 --log-level DEBUG）
+- `--temp-dir`: 临时分片目录 (默认：data/temp_segments)
+- `--output-dir`: 输出目录 (默认：output)
+
+示例：
+```bash
+# 监听所有地址，端口 8080
+python backend/server.py --host 0.0.0.0 --port 8080
+
+# 设置默认 16 并发，DEBUG 日志
+python backend/server.py --default-threads 16 --log-level DEBUG
+```
 
 ### 健康检查
 
 ```bash
+# 使用 curl 检查
 curl http://localhost:6900/health
+
+# 或查看容器健康状态
+docker inspect --format='{{.State.Health.Status}}' m3u8-downloader
 ```
 
 ## 注意事项
 
-1. 使用前请确保已安装 ffmpeg 并添加到 PATH
+1. Docker 镜像已内置 ffmpeg，无需额外安装
 2. 后端服务需要保持运行才能使用 Edge 插件
 3. 默认情况下，下载完成后会清理分片文件，保留元数据
 4. `tools/test_cli.py` 仅用于开发调试，生产环境请使用 Edge 插件
