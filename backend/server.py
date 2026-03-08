@@ -32,7 +32,8 @@ from logger import get_logger, LOG_FILE, setup_logger
 # 全局配置（通过命令行参数设置）
 server_config = {
     "default_threads": 8,
-    "ffmpeg_path": "ffmpeg",
+    "temp_dir": "data/temp_segments",
+    "output_dir": "output",
 }
 
 logger = None  # 在 main() 中初始化
@@ -41,6 +42,7 @@ app = Quart(__name__)
 app = cors(app)
 
 # ===== 常量 =====
+# 注意：实际目录由命令行参数或 server_config 配置，此处仅为默认值
 DEFAULT_TEMP_DIR = "data/temp_segments"
 DEFAULT_OUTPUT_DIR = "output"
 
@@ -81,12 +83,11 @@ def _create_task_from_request(data: dict) -> tuple:
     return task_manager.create_task(
         url=data['url'],
         threads=data.get('threads') if data.get('threads') is not None else server_config.get("default_threads", 8),
-        output_dir=DEFAULT_OUTPUT_DIR,
-        temp_dir=DEFAULT_TEMP_DIR,
+        output_dir=server_config.get("output_dir", DEFAULT_OUTPUT_DIR),
+        temp_dir=server_config.get("temp_dir", DEFAULT_TEMP_DIR),
         max_rounds=data.get('max_rounds', 5),
         keep_cache=data.get('keep_cache', False),
         output_name=data.get('output'),
-        ffmpeg_path=server_config.get("ffmpeg_path", "ffmpeg")
     )
 
 
@@ -399,7 +400,6 @@ async def cache_update():
             output_dir=DEFAULT_OUTPUT_DIR,
             max_download_rounds=1,
             keep_cache=True,
-            ffmpeg_path=server_config.get("ffmpeg_path", "ffmpeg"),
         )
 
         cm = CacheManager(temp_dir=config.temp_dir, url=config.url, keep_cache=config.keep_cache)
@@ -481,10 +481,18 @@ API 端点:
         help="启用调试模式（等同于 --log-level DEBUG）"
     )
     parser.add_argument(
-        "--ffmpeg-path",
+        "--temp-dir",
         type=str,
-        default="ffmpeg",
-        help="ffmpeg 路径 (默认：ffmpeg)"
+        default="data/temp_segments",
+        metavar="DIR",
+        help="临时分片目录 (默认：data/temp_segments)"
+    )
+    parser.add_argument(
+        "--output-dir",
+        type=str,
+        default="output",
+        metavar="DIR",
+        help="输出目录 (默认：output)"
     )
     return parser.parse_args()
 
@@ -497,7 +505,8 @@ def main():
 
     # 更新全局配置
     server_config["default_threads"] = args.default_threads
-    server_config["ffmpeg_path"] = args.ffmpeg_path
+    server_config["temp_dir"] = args.temp_dir
+    server_config["output_dir"] = args.output_dir
 
     # 设置日志级别
     log_level = logging.DEBUG if args.debug else getattr(logging, args.log_level.upper(), logging.INFO)

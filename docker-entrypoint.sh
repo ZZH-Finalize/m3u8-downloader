@@ -34,9 +34,14 @@ if [ "$DEBUG" = "true" ]; then
     ARGS="$ARGS --debug"
 fi
 
-# FFmpeg 路径
-if [ -n "$FFMPEG_PATH" ]; then
-    ARGS="$ARGS --ffmpeg-path $FFMPEG_PATH"
+# 临时分片目录
+if [ -n "$TEMP_DIR" ]; then
+    ARGS="$ARGS --temp-dir $TEMP_DIR"
+fi
+
+# 输出目录
+if [ -n "$OUTPUT_DIR" ]; then
+    ARGS="$ARGS --output-dir $OUTPUT_DIR"
 fi
 
 # 执行命令
