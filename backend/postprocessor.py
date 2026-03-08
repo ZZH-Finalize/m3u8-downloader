@@ -6,7 +6,6 @@
 """
 
 import asyncio
-import tempfile
 from pathlib import Path
 
 from models import AppConfig, MergeResult
@@ -29,7 +28,7 @@ class MediaPostprocessor:
         异步合并分片并转换为 mp4
 
         Args:
-            segment_paths: 分片本地路径列表
+            segment_paths: 分片本地路径列表（已按 metadata.filenames 顺序排列）
 
         Returns:
             MergeResult: 合并结果
@@ -50,15 +49,18 @@ class MediaPostprocessor:
                 error="未找到 ffmpeg，请确保已安装并添加到 PATH，或设置 FFMPEG_PATH 环境变量指定路径"
             )
 
-        # 创建临时文件列表
-        temp_list_file = self._create_segment_list(segment_paths)
+        # 获取项目根目录（ffmpeg 运行目录）
+        project_root = Path(__file__).resolve().parent.parent
 
-        # 执行 ffmpeg 合并
+        # 创建 ffmpeg 所需的文件列表（系统临时目录），使用绝对路径
+        temp_list_file = self._create_ffmpeg_list_file(segment_paths)
+
+        # 执行 ffmpeg 合并（在项目根目录下运行，输入输出均使用绝对路径）
         logger.info(f"正在合并 {len(segment_paths)} 个分片并转换为 mp4...")
 
-        success = await self._run_ffmpeg(temp_list_file)
+        success = await self._run_ffmpeg(temp_list_file, project_root)
 
-        # 清理临时文件
+        # 清理临时文件（系统临时目录的文件）
         temp_list_file.unlink(missing_ok=True)
 
         if success:
@@ -87,16 +89,27 @@ class MediaPostprocessor:
         except (FileNotFoundError, Exception):
             return False
 
-    def _create_segment_list(
+    def _create_ffmpeg_list_file(
         self,
         segment_paths: list[Path]
     ) -> Path:
-        """创建 ffmpeg 所需的文件列表（使用系统临时目录）"""
+        """
+        创建 ffmpeg 所需的文件列表（使用系统临时目录）
+        使用绝对路径
+
+        Args:
+            segment_paths: 分片路径列表
+
+        Returns:
+            临时文件路径
+        """
+        import tempfile
+
         # 使用 NamedTemporaryFile 创建临时文件，delete=False 让 ffmpeg 执行完后手动删除
         temp_file = tempfile.NamedTemporaryFile(
             mode="w",
             suffix=".txt",
-            prefix="m3u8_segments_",
+            prefix="m3u8_ffmpeg_",
             delete=False,
             encoding="utf-8"
         )
@@ -104,14 +117,22 @@ class MediaPostprocessor:
 
         with temp_file:
             for path in segment_paths:
-                # 使用绝对路径，确保 ffmpeg 能正确找到文件
-                abs_path = path.resolve()
-                temp_file.write(f"file '{abs_path.as_posix()}'\n")
+                # 使用绝对路径
+                temp_file.write(f"file '{path.resolve()}'\n")
 
         return temp_list_file
 
-    async def _run_ffmpeg(self, list_file: Path) -> bool:
-        """异步执行 ffmpeg 命令"""
+    async def _run_ffmpeg(self, list_file: Path, work_dir: Path) -> bool:
+        """
+        异步执行 ffmpeg 命令（在工作目录下运行，输入输出均使用绝对路径）
+
+        Args:
+            list_file: 分片列表文件路径（系统临时目录）
+            work_dir: 工作目录（ffmpeg 在此目录下运行，即项目根目录）
+        """
+        # 输出文件使用绝对路径
+        output_path = Path(self.output_file).resolve()
+
         cmd = [
             self.ffmpeg_path,
             "-y",  # 覆盖输出文件
@@ -120,7 +141,7 @@ class MediaPostprocessor:
             "-i", str(list_file),
             "-c", "copy",  # 直接复制流，不重新编码
             "-bsf:a", "aac_adtstoasc",  # 音频比特流过滤器
-            self.output_file,
+            str(output_path),
         ]
 
         try:

@@ -701,6 +701,9 @@ def main():
     setup_logger("cache_manager", level=log_level)
     setup_logger("task_manager", level=log_level)
 
+    # 获取 hypercorn.access 日志记录器
+    logging.getLogger('hypercorn.access').disabled = True
+
     logger.info(f"启动 m3u8 下载服务 API (异步版本)")
     logger.info(f"监听地址：{args.host}:{args.port}")
     logger.info(f"默认并发数：{server_config['default_threads']}")

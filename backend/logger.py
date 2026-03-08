@@ -61,7 +61,8 @@ def setup_logger(
         LOG_FILE,
         maxBytes=10 * 1024 * 1024,
         backupCount=5,
-        encoding="utf-8"
+        encoding="utf-8",
+        mode='w'  # 以写入模式打开，启动时清空文件
     )
     file_handler.setLevel(logging.DEBUG)  # 文件记录所有级别
     file_formatter = logging.Formatter(LOG_FORMAT, datefmt=DATE_FORMAT)
@@ -116,7 +117,8 @@ def get_logger(name: str = None, debug: bool = False) -> logging.Logger:
             log_file,
             maxBytes=10 * 1024 * 1024,
             backupCount=5,
-            encoding="utf-8"
+            encoding="utf-8",
+            mode='w'  # 以写入模式打开，启动时清空文件
         )
         file_handler.setLevel(logging.DEBUG)
         file_formatter = logging.Formatter(LOG_FORMAT, datefmt=DATE_FORMAT)

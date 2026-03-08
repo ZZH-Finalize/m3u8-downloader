@@ -304,11 +304,22 @@ class SegmentDownloader:
         self,
         results: list[DownloadResult]
     ) -> list[Path]:
-        """从下载结果中提取成功下载的路径（按 m3u8 中的分片顺序）"""
-        # 先过滤出成功的结果，然后按 segment.index 排序，确保与 m3u8 文件中的顺序一致
-        success_results = [
-            r for r in results
+        """
+        从下载结果中提取成功下载的路径
+        顺序与 metadata.filenames 一致（即 m3u8 中的顺序）
+
+        注意：调用此方法前应确保所有分片都已下载成功
+        """
+        # 构建 filename 到 Path 的映射
+        path_map = {
+            r.segment.filename: r.local_path
+            for r in results
             if r.success and r.local_path
+        }
+
+        # 按 metadata.filenames 的顺序返回路径
+        return [
+            path_map[filename]
+            for filename in self.config.metadata.filenames
+            if filename in path_map
         ]
-        success_results.sort(key=lambda r: r.segment.index)
-        return [r.local_path for r in success_results]
