@@ -12,7 +12,7 @@ from logging.handlers import RotatingFileHandler
 
 
 # 默认配置（可被 server.py 修改）
-LOG_DIR = Path("logs")
+LOG_DIR = Path("data/logs")
 LOG_FILE = LOG_DIR / "m3u8-downloader.log"
 LOG_FORMAT = "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
 CONSOLE_FORMAT = "[%(levelname)s] %(message)s"

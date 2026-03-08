@@ -14,7 +14,7 @@ from pathlib import Path
 
 # 后端 API 服务地址
 DEFAULT_API_HOST = "127.0.0.1"
-DEFAULT_API_PORT = 5000
+DEFAULT_API_PORT = 6900
 
 
 def get_api_base_url(host: str, port: int) -> str:

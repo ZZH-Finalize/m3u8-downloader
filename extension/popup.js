@@ -1,7 +1,7 @@
 // API 基础配置
 const DEFAULT_CONFIG = {
   host: '127.0.0.1',
-  port: '5000',
+  port: '6900',
   defaultThreads: 8,
   autoRefresh: 2000
 };
@@ -221,7 +221,7 @@ async function handleSaveSettings(e) {
   e.preventDefault();
 
   config.host = document.getElementById('setting-host').value.trim() || '127.0.0.1';
-  config.port = document.getElementById('setting-port').value.trim() || '5000';
+  config.port = document.getElementById('setting-port').value.trim() || '6900';
   config.defaultThreads = parseInt(document.getElementById('setting-default-threads').value) || 8;
   config.autoRefresh = parseInt(document.getElementById('setting-auto-refresh').value) || 0;
 

@@ -4,49 +4,44 @@ FROM python:3.12-slim
 # 设置工作目录
 WORKDIR /app
 
-# 设置环境变量
+# 设置环境变量（Python 优化 + 服务器配置）
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
-    PIP_DISABLE_PIP_VERSION_CHECK=1
-
-# 默认环境变量（可在 docker-compose.yml 或 docker run 时覆盖）
-ENV SERVER_HOST=0.0.0.0 \
-    SERVER_PORT=5000 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    SERVER_HOST=0.0.0.0 \
+    SERVER_PORT=6900 \
     DEFAULT_THREADS=8 \
     LOG_LEVEL=INFO \
-    LOG_DIR=logs \
+    LOG_DIR=/data/logs \
     DEBUG=false \
     FFMPEG_PATH=ffmpeg
 
-# 安装 ffmpeg
+VOLUME ["/output", "/data"]
+
+# 安装 ffmpeg 和 Python 依赖（合并指令减少层数）
 RUN apt-get update && \
     apt-get install -y --no-install-recommends ffmpeg && \
     apt-get clean && \
-    rm -rf /var/lib/apt/lists/*
+    rm -rf /var/lib/apt/lists/* && \
+    pip install --no-cache-dir --upgrade pip && \
+    mkdir -p /data/logs /output /data/temp_segments
 
-# 复制依赖文件
+# 复制并安装依赖（利用 Docker 缓存层）
 COPY requirements.txt .
-
-# 安装 Python 依赖
 RUN pip install --no-cache-dir -r requirements.txt
 
-# 复制后端代码
-COPY backend/ ./backend/
-
-# 创建日志目录
-RUN mkdir -p /app/logs
-
-# 暴露端口
-EXPOSE 5000
-
-# 健康检查
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:5000/health')" || exit 1
-
-# 启动脚本，支持环境变量配置
+# 复制应用代码（backend 内容直接放到 /app）
+COPY backend/ ./
 COPY docker-entrypoint.sh /docker-entrypoint.sh
 RUN chmod +x /docker-entrypoint.sh
 
+# 暴露端口
+EXPOSE 6900
+
+# 健康检查
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:6900/health')" || exit 1
+
 ENTRYPOINT ["/docker-entrypoint.sh"]
-CMD ["python", "backend/server.py"]
+CMD ["python", "server.py"]

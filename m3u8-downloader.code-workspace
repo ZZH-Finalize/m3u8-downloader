@@ -13,7 +13,9 @@
                 "type": "shell",
                 "command": "python",
                 "args": [
-                    "backend/server.py"
+                    "backend/server.py",
+                    "--port",
+                    "6900"
                 ],
                 "options": {
                     "cwd": "${workspaceFolder}"

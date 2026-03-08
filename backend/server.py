@@ -41,7 +41,7 @@ app = Quart(__name__)
 app = cors(app)
 
 # ===== 常量 =====
-DEFAULT_TEMP_DIR = "temp_segments"
+DEFAULT_TEMP_DIR = "data/temp_segments"
 DEFAULT_OUTPUT_DIR = "output"
 
 
@@ -451,8 +451,8 @@ API 端点:
     parser.add_argument(
         "--port",
         type=int,
-        default=5000,
-        help="监听端口 (默认：5000)"
+        default=6900,
+        help="监听端口 (默认：6900)"
     )
     parser.add_argument(
         "--default-threads",

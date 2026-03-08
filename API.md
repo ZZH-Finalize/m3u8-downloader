@@ -5,7 +5,7 @@
 ## 基本信息
 
 - **基础 URL**: `http://<host>:<port>`
-- **默认地址**: `http://127.0.0.1:5000`
+- **默认地址**: `http://127.0.0.1:6900`
 - **数据格式**: JSON
 - **字符编码**: UTF-8
 
@@ -20,7 +20,7 @@ python backend/server.py [选项]
 | 参数 | 默认值 | 说明 |
 |------|--------|------|
 | `--host` | `127.0.0.1` | 监听地址 IP |
-| `--port` | `5000` | 监听端口 |
+| `--port` | `6900` | 监听端口 |
 | `--default-threads` | `8` | 默认下载并发数 |
 | `--log-level` | `INFO` | 日志级别 (DEBUG/INFO/WARNING/ERROR/CRITICAL) |
 | `--log-dir` | `logs` | 日志目录 |
@@ -591,12 +591,12 @@ Content-Type: application/json
 
 #### 1. 健康检查
 ```bash
-curl http://127.0.0.1:5000/health
+curl http://127.0.0.1:6900/health
 ```
 
 #### 2. 下载视频
 ```bash
-curl -X POST http://127.0.0.1:5000/api/download \
+curl -X POST http://127.0.0.1:6900/api/download \
   -H "Content-Type: application/json" \
   -d '{
     "url": "https://example.com/video.m3u8",
@@ -612,49 +612,49 @@ python tools/test_cli.py download https://example.com/video.m3u8 --trace
 
 #### 3. 列出所有任务
 ```bash
-curl http://127.0.0.1:5000/api/tasks
+curl http://127.0.0.1:6900/api/tasks
 ```
 
 #### 4. 查询任务状态
 ```bash
-curl http://127.0.0.1:5000/api/tasks/abc12345
+curl http://127.0.0.1:6900/api/tasks/abc12345
 ```
 
 #### 5. 取消任务
 ```bash
-curl -X DELETE http://127.0.0.1:5000/api/tasks/abc12345
+curl -X DELETE http://127.0.0.1:6900/api/tasks/abc12345
 ```
 
 #### 6. 列出缓存
 ```bash
-curl http://127.0.0.1:5000/api/cache/list
+curl http://127.0.0.1:6900/api/cache/list
 ```
 
 #### 7. 获取缓存详情
 ```bash
-curl http://127.0.0.1:5000/api/cache/74a993fffd15ddbe
+curl http://127.0.0.1:6900/api/cache/74a993fffd15ddbe
 ```
 
 #### 8. 删除缓存
 ```bash
-curl -X DELETE http://127.0.0.1:5000/api/cache/74a993fffd15ddbe
+curl -X DELETE http://127.0.0.1:6900/api/cache/74a993fffd15ddbe
 ```
 
 #### 9. 清空所有缓存
 ```bash
-curl -X POST http://127.0.0.1:5000/api/cache/clear
+curl -X POST http://127.0.0.1:6900/api/cache/clear
 ```
 
 #### 10. 更新缓存元数据
 ```bash
-curl -X POST http://127.0.0.1:5000/api/cache/update \
+curl -X POST http://127.0.0.1:6900/api/cache/update \
   -H "Content-Type: application/json" \
   -d '{"url": "https://example.com/video.m3u8"}'
 ```
 
 #### 11. 获取服务器配置
 ```bash
-curl http://127.0.0.1:5000/api/config
+curl http://127.0.0.1:6900/api/config
 ```
 
 ### 使用 Python 调用
@@ -662,7 +662,7 @@ curl http://127.0.0.1:5000/api/config
 ```python
 import requests
 
-API_BASE = "http://127.0.0.1:5000"
+API_BASE = "http://127.0.0.1:6900"
 
 # 下载视频（异步）
 response = requests.post(f"{API_BASE}/api/download", json={

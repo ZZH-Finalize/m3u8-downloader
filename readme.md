@@ -47,11 +47,11 @@ pip install -r requirements.txt
 python backend/server.py
 ```
 
-后端服务默认监听 `127.0.0.1:5000`
+后端服务默认监听 `127.0.0.1:6900`
 
 可选参数：
 - `--host`: 监听地址 IP (默认：127.0.0.1)
-- `--port`: 监听端口 (默认：5000)
+- `--port`: 监听端口 (默认：6900)
 - `--default-threads`: 默认下载并发数 (默认：8)
 - `--log-level`: 日志级别 DEBUG|INFO|WARNING|ERROR|CRITICAL (默认：INFO)
 - `--log-dir`: 日志目录 (默认：logs)
@@ -133,17 +133,17 @@ GET /health
 
 ```bash
 # 1. 提交异步下载任务
-curl -X POST http://127.0.0.1:5000/api/download \
+curl -X POST http://127.0.0.1:6900/api/download \
   -H "Content-Type: application/json" \
   -d '{"url": "https://example.com/video.m3u8"}'
 
 # 返回：{"success": true, "task_id": "abc12345", "status": "pending"}
 
 # 2. 查询任务进度
-curl http://127.0.0.1:5000/api/tasks/abc12345
+curl http://127.0.0.1:6900/api/tasks/abc12345
 
 # 3. 取消任务
-curl -X DELETE http://127.0.0.1:5000/api/tasks/abc12345
+curl -X DELETE http://127.0.0.1:6900/api/tasks/abc12345
 ```
 
 ## Docker 部署
@@ -155,7 +155,7 @@ curl -X DELETE http://127.0.0.1:5000/api/tasks/abc12345
 | 变量名 | 默认值 | 说明 |
 |--------|--------|------|
 | `SERVER_HOST` | `0.0.0.0` | 监听地址 IP |
-| `SERVER_PORT` | `5000` | 监听端口 |
+| `SERVER_PORT` | `6900` | 监听端口 |
 | `DEFAULT_THREADS` | `8` | 默认下载并发数 |
 | `LOG_LEVEL` | `INFO` | 日志级别 |
 | `LOG_DIR` | `logs` | 日志目录 |
@@ -195,7 +195,7 @@ docker build -t m3u8-downloader .
 # 运行容器
 docker run -d \
   --name m3u8-downloader \
-  -p 5000:5000 \
+  -p 6900:6900 \
   -v $(pwd)/downloads:/app/downloads \
   -v $(pwd)/logs:/app/logs \
   m3u8-downloader
@@ -211,7 +211,7 @@ docker run -d \
 ### 健康检查
 
 ```bash
-curl http://localhost:5000/health
+curl http://localhost:6900/health
 ```
 
 ## 注意事项
