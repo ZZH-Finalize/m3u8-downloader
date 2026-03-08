@@ -168,7 +168,8 @@ async def download():
             temp_dir="temp_segments",
             max_rounds=max_rounds,
             keep_cache=keep_cache,
-            output_name=output_name
+            output_name=output_name,
+            ffmpeg_path=server_config.get("ffmpeg_path", "ffmpeg")
         )
 
         # 启动后台任务
@@ -233,7 +234,8 @@ async def download_sync():
             temp_dir="temp_segments",
             max_rounds=max_rounds,
             keep_cache=keep_cache,
-            output_name=output_name
+            output_name=output_name,
+            ffmpeg_path=server_config.get("ffmpeg_path", "ffmpeg")
         )
 
         # 等待任务完成

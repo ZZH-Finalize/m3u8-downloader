@@ -6,7 +6,7 @@
 """
 
 import asyncio
-import os
+import tempfile
 from pathlib import Path
 
 from models import AppConfig, MergeResult
@@ -21,8 +21,8 @@ class MediaPostprocessor:
     def __init__(self, config: AppConfig):
         self.config = config
         self.output_file = config.output_file
-        # 从环境变量或配置获取 ffmpeg 路径
-        self.ffmpeg_path = os.environ.get("FFMPEG_PATH", config.ffmpeg_path)
+        # ffmpeg 路径从配置获取（配置来自 CLI 参数）
+        self.ffmpeg_path = config.ffmpeg_path
 
     async def merge(self, segment_paths: list[Path]) -> MergeResult:
         """
@@ -91,14 +91,22 @@ class MediaPostprocessor:
         self,
         segment_paths: list[Path]
     ) -> Path:
-        """创建 ffmpeg 所需的文件列表"""
-        temp_list_file = segment_paths[0].parent / "segments_list.txt"
+        """创建 ffmpeg 所需的文件列表（使用系统临时目录）"""
+        # 使用 NamedTemporaryFile 创建临时文件，delete=False 让 ffmpeg 执行完后手动删除
+        temp_file = tempfile.NamedTemporaryFile(
+            mode="w",
+            suffix=".txt",
+            prefix="m3u8_segments_",
+            delete=False,
+            encoding="utf-8"
+        )
+        temp_list_file = Path(temp_file.name)
 
-        with open(temp_list_file, "w", encoding="utf-8") as f:
+        with temp_file:
             for path in segment_paths:
                 # 使用绝对路径，确保 ffmpeg 能正确找到文件
                 abs_path = path.resolve()
-                f.write(f"file '{abs_path.as_posix()}'\n")
+                temp_file.write(f"file '{abs_path.as_posix()}'\n")
 
         return temp_list_file
 

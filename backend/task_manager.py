@@ -6,7 +6,6 @@
 """
 
 import asyncio
-import os
 import uuid
 from datetime import datetime
 from enum import Enum
@@ -119,7 +118,8 @@ class TaskManager:
         temp_dir: str = "temp_segments",
         max_rounds: int = 5,
         keep_cache: bool = False,
-        output_name: str = None
+        output_name: str = None,
+        ffmpeg_path: str = "ffmpeg"
     ) -> DownloadTask:
         """
         创建新的下载任务
@@ -132,6 +132,7 @@ class TaskManager:
             max_rounds: 最大下载轮次
             keep_cache: 是否保留缓存
             output_name: 输出文件名
+            ffmpeg_path: ffmpeg 路径
 
         Returns:
             DownloadTask: 任务对象
@@ -146,7 +147,7 @@ class TaskManager:
             output_dir=output_dir,
             max_download_rounds=max_rounds,
             keep_cache=keep_cache,
-            ffmpeg_path=os.environ.get("FFMPEG_PATH", "ffmpeg"),
+            ffmpeg_path=ffmpeg_path,
         )
 
         # 创建缓存管理器
