@@ -254,10 +254,13 @@ def _build_cache_info(cache_dir: Path) -> dict:
     cache_info = cm.get_cache_info()
     metadata = cm.load_metadata()
 
+    # 从元数据获取总分片数，如果元数据不存在则使用实际文件数
+    segment_count = len(metadata.filenames) if metadata else cache_info["segment_count"]
+
     return {
         "id": cache_dir.name,
         "url": metadata.url if metadata else "未知",
-        "segment_count": cache_info["segment_count"],
+        "segment_count": segment_count,
         "m3u8_count": cache_info["m3u8_count"],
         "total_size": cache_info["total_size"],
         "total_size_mb": round(cache_info["total_size"] / (1024 * 1024), 2),
@@ -290,6 +293,8 @@ async def cache_get(cache_id: str):
     cache_info = cm.get_cache_info()
     metadata = cm.load_metadata()
 
+    # 从元数据获取总分片数，如果元数据不存在则使用实际文件数
+    segment_count = len(metadata.filenames) if metadata else cache_info["segment_count"]
     downloaded_count = metadata.get_downloaded_count() if metadata else 0
 
     return jsonify({
@@ -298,7 +303,7 @@ async def cache_get(cache_id: str):
             "id": cache_id,
             "url": metadata.url if metadata else "未知",
             "base_url": metadata.base_url if metadata else None,
-            "segment_count": cache_info["segment_count"],
+            "segment_count": segment_count,
             "m3u8_count": cache_info["m3u8_count"],
             "total_size": cache_info["total_size"],
             "total_size_mb": round(cache_info["total_size"] / (1024 * 1024), 2),
