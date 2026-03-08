@@ -76,7 +76,7 @@ body {
   border-radius: 6px;
   background-color: rgba(255, 255, 255, 0.9);
   color: #333;
-  font-size: 13px;
+  font-size: 12px;
   cursor: pointer;
   transition: all 0.2s ease;
 }
@@ -399,6 +399,8 @@ body {
   max-width: 400px;
   max-height: 90vh;
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
   box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
 }
 
@@ -413,6 +415,7 @@ body {
   align-items: center;
   padding: 16px 20px;
   border-bottom: 1px solid #e0e0e0;
+  flex-shrink: 0;
 }
 
 .modal-header h3 {
@@ -446,6 +449,7 @@ body {
   padding: 20px;
   overflow-y: auto;
   max-height: calc(90vh - 140px);
+  flex: 1;
 }
 
 .modal-footer {
@@ -623,6 +627,7 @@ body {
   display: flex;
   gap: 8px;
   margin-bottom: 12px;
+  flex-shrink: 0;
 }
 
 .cache-toolbar-btn {
@@ -650,8 +655,16 @@ body {
 }
 
 .cache-list {
-  max-height: 350px;
+  flex: 1;
   overflow-y: auto;
+  min-height: 0;
+}
+
+/* 缓存管理对话框的 body 不滚动，只让 cache-list 滚动 */
+.cache-modal-body {
+  display: flex;
+  flex-direction: column;
+  overflow: visible;
 }
 
 .cache-item {
