@@ -21,6 +21,10 @@
         <span class="icon">🗑️</span>
         <span>删除任务</span>
       </button>
+      <button id="btn-cache" class="toolbar-btn" title="缓存管理">
+        <span class="icon">📦</span>
+        <span>缓存管理</span>
+      </button>
       <button id="btn-settings" class="toolbar-btn" title="系统设置">
         <span class="icon">⚙️</span>
         <span>系统设置</span>
@@ -125,6 +129,62 @@
       <div class="modal-footer">
         <button type="button" id="cancel-settings" class="btn btn-secondary">取消</button>
         <button type="submit" form="settings-form" class="btn btn-primary">保存设置</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 缓存管理对话框 -->
+  <div id="cache-modal" class="modal" style="display: none;">
+    <div class="modal-content modal-content-lg">
+      <div class="modal-header">
+        <h3>缓存管理</h3>
+        <button class="modal-close" id="close-cache-modal">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="cache-toolbar">
+          <button id="btn-refresh-cache" class="cache-toolbar-btn" title="刷新列表">
+            <span class="icon">🔄</span>
+            <span>刷新</span>
+          </button>
+          <button id="btn-clear-cache" class="cache-toolbar-btn btn-danger" title="清空所有缓存">
+            <span class="icon">🧹</span>
+            <span>清空所有</span>
+          </button>
+        </div>
+        <div id="cache-list" class="cache-list">
+          <!-- 缓存项将通过 JS 动态插入 -->
+        </div>
+        <div id="cache-empty-state" class="empty-state" style="display: none;">
+          <span class="empty-icon">📭</span>
+          <p>暂无缓存数据</p>
+        </div>
+        <div id="cache-loading-state" class="loading-state">
+          <span class="loading-spinner">⏳</span>
+          <p>加载中...</p>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" id="close-cache" class="btn btn-secondary">关闭</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 缓存详情对话框 -->
+  <div id="cache-detail-modal" class="modal" style="display: none;">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>缓存详情</h3>
+        <button class="modal-close" id="close-cache-detail-modal">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div id="cache-detail-content" class="cache-detail-content">
+          <!-- 详情内容将通过 JS 动态插入 -->
+        </div>
+      </div>
+      <div class="modal-footer" id="cache-detail-actions">
+        <button type="button" id="close-cache-detail" class="btn btn-secondary">关闭</button>
+        <button type="button" id="btn-update-cache" class="btn btn-primary">更新缓存</button>
+        <button type="button" id="btn-delete-cache" class="btn btn-danger">删除缓存</button>
       </div>
     </div>
   </div>

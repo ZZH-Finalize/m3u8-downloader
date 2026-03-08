@@ -612,3 +612,202 @@ body {
 .modal-body::-webkit-scrollbar-thumb:hover {
   background: #aaa;
 }
+
+/* 缓存管理样式 */
+.modal-content-lg {
+  max-width: 550px;
+  width: 95%;
+}
+
+.cache-toolbar {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.cache-toolbar-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  background-color: #fff;
+  color: #333;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.cache-toolbar-btn:hover {
+  background-color: #f0f0f0;
+  border-color: #ccc;
+}
+
+.cache-toolbar-btn .icon {
+  font-size: 14px;
+}
+
+.cache-list {
+  max-height: 350px;
+  overflow-y: auto;
+}
+
+.cache-item {
+  display: flex;
+  flex-direction: column;
+  padding: 12px;
+  margin-bottom: 8px;
+  background-color: #fff;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  transition: all 0.2s ease;
+  cursor: pointer;
+}
+
+.cache-item:hover {
+  border-color: #667eea;
+  box-shadow: 0 2px 8px rgba(102, 126, 234, 0.15);
+}
+
+.cache-item.selected {
+  border-color: #667eea;
+  background-color: #f0f3ff;
+  box-shadow: 0 2px 8px rgba(102, 126, 234, 0.25);
+}
+
+.cache-item.locked {
+  background-color: #f9f9f9;
+  opacity: 0.7;
+}
+
+.cache-item-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 8px;
+}
+
+.cache-id {
+  font-family: 'Consolas', 'Monaco', monospace;
+  font-size: 11px;
+  color: #666;
+  background-color: #f0f0f0;
+  padding: 2px 6px;
+  border-radius: 3px;
+}
+
+.cache-status {
+  font-size: 12px;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-weight: 500;
+}
+
+.cache-status.complete {
+  background-color: #d4edda;
+  color: #155724;
+}
+
+.cache-status.incomplete {
+  background-color: #fff3cd;
+  color: #856404;
+}
+
+.cache-status.locked {
+  background-color: #e2e3e5;
+  color: #383d41;
+}
+
+.cache-url {
+  font-size: 12px;
+  color: #666;
+  word-break: break-all;
+  margin-bottom: 8px;
+  padding: 6px;
+  background-color: #f9f9f9;
+  border-radius: 4px;
+}
+
+.cache-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12px;
+  color: #888;
+}
+
+.cache-size {
+  font-weight: 500;
+  color: #667eea;
+}
+
+.cache-count {
+  font-family: 'Consolas', 'Monaco', monospace;
+}
+
+.cache-created {
+  font-size: 11px;
+  color: #999;
+  margin-top: 6px;
+}
+
+/* 缓存详情样式 */
+.cache-detail-content {
+  font-size: 13px;
+  line-height: 1.8;
+}
+
+.cache-detail-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 8px 0;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.cache-detail-row:last-child {
+  border-bottom: none;
+}
+
+.cache-detail-label {
+  font-weight: 500;
+  color: #666;
+}
+
+.cache-detail-value {
+  color: #333;
+  word-break: break-all;
+  max-width: 60%;
+}
+
+.cache-detail-value.url {
+  font-family: 'Consolas', 'Monaco', monospace;
+  font-size: 12px;
+  background-color: #f9f9f9;
+  padding: 4px 8px;
+  border-radius: 4px;
+}
+
+.cache-detail-value.locked {
+  color: #dc3545;
+  font-weight: 500;
+}
+
+.cache-locked-badge {
+  display: inline-block;
+  padding: 4px 12px;
+  background-color: #e2e3e5;
+  color: #383d41;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 500;
+  margin-top: 8px;
+}
+
+/* 按钮禁用状态 */
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  pointer-events: none;
+}
