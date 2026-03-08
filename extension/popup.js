@@ -74,15 +74,47 @@ async function saveConfig() {
 
 // 应用配置到 UI
 function applyConfigToUI() {
-  document.getElementById('setting-host').value = config.host;
-  document.getElementById('setting-port').value = config.port;
+  const protocol = config.protocol || 'http';
+  document.getElementById('setting-address').value = `${protocol}://${config.host}:${config.port}`;
   document.getElementById('setting-default-threads').value = config.defaultThreads;
   document.getElementById('setting-auto-refresh').value = String(config.autoRefresh);
 }
 
 // 获取 API 基础 URL
 function getApiBaseUrl() {
-  return `http://${config.host}:${config.port}`;
+  return `${config.protocol || 'http'}://${config.host}:${config.port}`;
+}
+
+// 解析服务器地址，自动识别协议、主机和端口
+function parseServerAddress(address) {
+  let protocol = 'http';
+  let host = '127.0.0.1';
+  let port = '6900';
+  
+  if (!address || !address.trim()) {
+    return { protocol, host, port };
+  }
+  
+  let trimmed = address.trim();
+  
+  // 检查是否包含协议前缀
+  const protocolMatch = trimmed.match(/^([a-zA-Z][a-zA-Z0-9+.-]*):\/\//);
+  if (protocolMatch) {
+    protocol = protocolMatch[1].toLowerCase();
+    trimmed = trimmed.substring(protocolMatch[0].length);
+  }
+  
+  // 检查是否包含端口
+  const portMatch = trimmed.match(/:(\d+)$/);
+  if (portMatch) {
+    port = portMatch[1];
+    trimmed = trimmed.substring(0, trimmed.length - portMatch[0].length);
+  }
+  
+  // 剩余部分为主机名（IP 或域名）
+  host = trimmed || '127.0.0.1';
+  
+  return { protocol, host, port };
 }
 
 // 设置事件监听器
@@ -129,11 +161,11 @@ function setupEventListeners() {
   });
 
   // 设置页面输入变化
-  document.getElementById('setting-host').addEventListener('change', (e) => {
-    config.host = e.target.value.trim();
-  });
-  document.getElementById('setting-port').addEventListener('change', (e) => {
-    config.port = e.target.value.trim();
+  document.getElementById('setting-address').addEventListener('change', (e) => {
+    const parsed = parseServerAddress(e.target.value);
+    config.protocol = parsed.protocol;
+    config.host = parsed.host;
+    config.port = parsed.port;
   });
   document.getElementById('setting-default-threads').addEventListener('change', (e) => {
     config.defaultThreads = parseInt(e.target.value) || 8;
@@ -220,8 +252,12 @@ async function handleAddTask(e) {
 async function handleSaveSettings(e) {
   e.preventDefault();
 
-  config.host = document.getElementById('setting-host').value.trim() || '127.0.0.1';
-  config.port = document.getElementById('setting-port').value.trim() || '6900';
+  const address = document.getElementById('setting-address').value.trim();
+  const parsed = parseServerAddress(address);
+  
+  config.protocol = parsed.protocol;
+  config.host = parsed.host;
+  config.port = parsed.port;
   config.defaultThreads = parseInt(document.getElementById('setting-default-threads').value) || 8;
   config.autoRefresh = parseInt(document.getElementById('setting-auto-refresh').value) || 0;
 
@@ -645,6 +681,7 @@ async function checkServerStatus() {
   const statusIndicator = document.querySelector('.status-indicator');
   const statusText = document.querySelector('.status-text');
   const wasOnline = isServerOnline;
+  const protocol = config.protocol || 'http';
 
   try {
     const response = await fetch(`${getApiBaseUrl()}/health`);
@@ -652,7 +689,7 @@ async function checkServerStatus() {
 
     if (result.status === 'healthy') {
       statusIndicator.className = 'status-indicator online';
-      statusText.textContent = `服务器在线 (${config.host}:${config.port})`;
+      statusText.textContent = `服务器在线 (${protocol}://${config.host}:${config.port})`;
       isServerOnline = true;
       // 从离线恢复在线时，启动自动刷新
       if (!wasOnline) {
@@ -663,7 +700,7 @@ async function checkServerStatus() {
     }
   } catch (error) {
     statusIndicator.className = 'status-indicator offline';
-    statusText.textContent = `服务器离线 (${config.host}:${config.port})`;
+    statusText.textContent = `服务器离线 (${protocol}://${config.host}:${config.port})`;
     isServerOnline = false;
     // 从在线变为离线时，停止自动刷新
     if (wasOnline) {
@@ -679,13 +716,14 @@ async function checkServerStatus() {
 function updateServerStatusUI() {
   const statusIndicator = document.querySelector('.status-indicator');
   const statusText = document.querySelector('.status-text');
-  
+  const protocol = config.protocol || 'http';
+
   if (isServerOnline) {
     statusIndicator.className = 'status-indicator online';
-    statusText.textContent = `服务器在线 (${config.host}:${config.port})`;
+    statusText.textContent = `服务器在线 (${protocol}://${config.host}:${config.port})`;
   } else {
     statusIndicator.className = 'status-indicator offline';
-    statusText.textContent = `服务器离线 (${config.host}:${config.port})`;
+    statusText.textContent = `服务器离线 (${protocol}://${config.host}:${config.port})`;
   }
 }
 
