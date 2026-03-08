@@ -294,6 +294,54 @@ class M3u8Parser:
 
         return f"{parsed.scheme}://{parsed.netloc}{path}"
 
+    def _extract_query_params(self, url: str) -> str:
+        """
+        提取 URL 中的查询参数（包含 ? 前缀）
+
+        Args:
+            url: 原始 URL
+
+        Returns:
+            查询参数字符串（包含 ?），如果没有则返回空字符串
+        """
+        parsed = urlparse(url)
+        if parsed.query:
+            return f"?{parsed.query}"
+        return ""
+
+    def _is_relative_segment_url(self, segment_url: str, base_url: str) -> bool:
+        """
+        判断分片 URL 是否是通过相对路径拼接而成的
+
+        Args:
+            segment_url: 分片的完整 URL
+            base_url: 基准 URL
+
+        Returns:
+            如果是相对路径拼接则返回 True
+        """
+        # 如果分片 URL 以 base_url 开头，说明是通过相对路径拼接的
+        return segment_url.startswith(base_url)
+
+    def _append_query_params(self, url: str, query_params: str) -> str:
+        """
+        给 URL 附加查询参数
+
+        Args:
+            url: 原始 URL
+            query_params: 查询参数字符串（包含 ?）
+
+        Returns:
+            附加查询参数后的 URL
+        """
+        if not query_params:
+            return url
+        
+        # 如果 URL 已经有查询参数，追加新的参数
+        if "?" in url:
+            return f"{url}&{query_params[1:]}"
+        return f"{url}{query_params}"
+
     def _extract_segments(
         self,
         playlist: m3u8.M3U8,
@@ -302,9 +350,17 @@ class M3u8Parser:
         """从 m3u8 playlist 中提取分片"""
         segments = []
 
+        # 提取原始 URL 的查询参数（如果有）
+        query_params = self._extract_query_params(self.config.url)
+
         for index, segment in enumerate(playlist.segments):
             segment_url = segment.absolute_uri
+            
             if segment_url:
+                # 如果原始 URL 有查询参数，且分片 URL 是相对路径拼接的，需要附加查询参数
+                if query_params and self._is_relative_segment_url(segment.absolute_uri, base_url):
+                    segment_url = self._append_query_params(segment.absolute_uri, query_params)
+                
                 filename = self._get_segment_filename(segment_url, base_url, index)
                 segments.append(SegmentInfo(
                     url=segment_url,
