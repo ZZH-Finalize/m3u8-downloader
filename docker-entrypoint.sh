@@ -34,5 +34,10 @@ if [ "$DEBUG" = "true" ]; then
     ARGS="$ARGS --debug"
 fi
 
+# FFmpeg 路径
+if [ -n "$FFMPEG_PATH" ]; then
+    ARGS="$ARGS --ffmpeg-path $FFMPEG_PATH"
+fi
+
 # 执行命令
 exec $@ $ARGS

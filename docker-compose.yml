@@ -9,15 +9,8 @@ services:
     ports:
       - "5000:5000"
     volumes:
-      # 挂载下载目录，方便获取下载的视频文件
-      - ./downloads:/app/downloads
       # 挂载日志目录
       - ./logs:/app/logs
-      # 可选：挂载宿主机的 ffmpeg（取消注释并使用）
-      # Windows 示例:
-      # - C:\ProgramData\chocolatey\bin\ffmpeg.exe:/usr/bin/ffmpeg:ro
-      # Linux/Mac 示例:
-      # - /usr/bin/ffmpeg:/usr/bin/ffmpeg:ro
     environment:
       # ===== 服务器配置 =====
       # 监听地址（Docker 容器内通常使用 0.0.0.0）

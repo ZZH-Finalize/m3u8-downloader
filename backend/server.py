@@ -29,10 +29,10 @@ from cache_manager import CacheManager
 from task_manager import task_manager, TaskManager, TaskStatus
 from logger import get_logger, LOG_FILE, setup_logger
 
-# 全局配置
+# 全局配置（通过命令行参数设置）
 server_config = {
     "default_threads": 8,  # 默认下载并发数
-    "ffmpeg_path": os.environ.get("FFMPEG_PATH", "ffmpeg"),  # ffmpeg 路径
+    "ffmpeg_path": "ffmpeg",  # ffmpeg 路径
 }
 
 logger = None  # 在 main() 中初始化
@@ -659,6 +659,12 @@ API 端点:
         action="store_true",
         help="启用调试模式（等同于 --log-level DEBUG）"
     )
+    parser.add_argument(
+        "--ffmpeg-path",
+        type=str,
+        default="ffmpeg",
+        help="ffmpeg 路径 (默认：ffmpeg)"
+    )
     return parser.parse_args()
 
 
@@ -670,6 +676,7 @@ def main():
 
     # 更新全局配置
     server_config["default_threads"] = args.default_threads
+    server_config["ffmpeg_path"] = args.ffmpeg_path
 
     # 设置日志级别
     log_level = logging.DEBUG if args.debug else getattr(logging, args.log_level.upper(), logging.INFO)

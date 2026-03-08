@@ -304,10 +304,11 @@ class SegmentDownloader:
         self,
         results: list[DownloadResult]
     ) -> list[Path]:
-        """从下载结果中提取成功下载的路径（按顺序）"""
-        success_paths = [
-            r.local_path for r in results
+        """从下载结果中提取成功下载的路径（按 m3u8 中的分片顺序）"""
+        # 先过滤出成功的结果，然后按 segment.index 排序，确保与 m3u8 文件中的顺序一致
+        success_results = [
+            r for r in results
             if r.success and r.local_path
         ]
-        success_paths.sort(key=lambda p: p.name)
-        return success_paths
+        success_results.sort(key=lambda r: r.segment.index)
+        return [r.local_path for r in success_results]
