@@ -174,6 +174,17 @@ function setupEventListeners() {
     config.autoRefresh = parseInt(e.target.value) || 0;
     restartAutoRefresh();
   });
+
+  // URL 输入框变化时自动解析文件名
+  document.getElementById('task-url').addEventListener('input', (e) => {
+    const url = e.target.value.trim();
+    if (url) {
+      const filename = extractFilenameFromUrl(url);
+      if (filename) {
+        document.getElementById('task-output').value = filename;
+      }
+    }
+  });
 }
 
 // 显示添加任务模态框
@@ -399,7 +410,7 @@ function createTaskElement(task) {
 
   // 失败任务添加重试按钮
   const retryButton = statusClass === 'failed' ? `
-    <button class="retry-btn" title="重试下载" onclick="retryTask('${task.task_id}', '${escapeHtmlForAttr(task.url)}')">
+    <button class="retry-btn" title="重试下载" data-task-id="${task.task_id}" data-task-url="${escapeHtmlForAttr(task.url)}">
       ↻ 重试
     </button>
   ` : '';
@@ -439,6 +450,17 @@ function createTaskElement(task) {
     div.classList.add('selected');
     selectedTaskId = task.task_id;
   });
+
+  // 为重试按钮添加事件监听器
+  const retryBtn = div.querySelector('.retry-btn');
+  if (retryBtn) {
+    retryBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const taskId = retryBtn.dataset.taskId;
+      const url = retryBtn.dataset.taskUrl;
+      retryTask(taskId, url);
+    });
+  }
 
   return div;
 }
@@ -534,10 +556,21 @@ function updateTaskElement(element, task) {
         retryBtn = document.createElement('button');
         retryBtn.className = 'retry-btn';
         retryBtn.title = '重试下载';
+        retryBtn.dataset.taskId = task.task_id;
+        retryBtn.dataset.taskUrl = task.url;
         retryBtn.innerHTML = `↻ 重试`;
-        retryBtn.onclick = () => retryTask(task.task_id, task.url);
+        retryBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const taskId = retryBtn.dataset.taskId;
+          const url = retryBtn.dataset.taskUrl;
+          retryTask(taskId, url);
+        });
         progressContainer.appendChild(retryBtn);
       }
+    } else {
+      // 更新已存在按钮的数据属性
+      retryBtn.dataset.taskId = task.task_id;
+      retryBtn.dataset.taskUrl = task.url;
     }
   } else if (retryBtn) {
     retryBtn.remove();
@@ -604,6 +637,47 @@ function escapeHtml(text) {
   const div = document.createElement('div');
   div.textContent = text;
   return div.innerHTML;
+}
+
+// 从 URL 提取文件名（统一输出为 .mp4）
+function extractFilenameFromUrl(url) {
+  try {
+    // 处理相对路径和带查询参数的 URL
+    const urlObj = new URL(url);
+    const pathname = urlObj.pathname;
+    
+    // 从路径中提取文件名
+    const filename = pathname.substring(pathname.lastIndexOf('/') + 1);
+    
+    // 如果文件名为空或只是斜杠，返回 null
+    if (!filename || filename === '') {
+      return null;
+    }
+    
+    // 解码 URL 编码的字符
+    const decodedFilename = decodeURIComponent(filename);
+    
+    // 移除查询参数（如果有的话）
+    const cleanFilename = decodedFilename.split('?')[0];
+    
+    // 移除原有扩展名，统一添加 .mp4
+    const nameWithoutExt = cleanFilename.includes('.') 
+      ? cleanFilename.substring(0, cleanFilename.lastIndexOf('.'))
+      : cleanFilename;
+    
+    return nameWithoutExt + '.mp4';
+  } catch (e) {
+    // URL 格式不正确，尝试从原始字符串提取
+    const match = url.match(/([^\/?#]+)(?:\?.*)?$/);
+    if (match && match[1]) {
+      const filename = decodeURIComponent(match[1]);
+      const nameWithoutExt = filename.includes('.') 
+        ? filename.substring(0, filename.lastIndexOf('.'))
+        : filename;
+      return nameWithoutExt + '.mp4';
+    }
+    return null;
+  }
 }
 
 // 渲染空状态
