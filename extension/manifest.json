@@ -17,9 +17,13 @@
     },
     "default_title": "m3u8 下载器"
   },
+  "background": {
+    "service_worker": "background.js"
+  },
   "permissions": [
     "storage",
-    "tabs"
+    "tabs",
+    "contextMenus"
   ],
   "host_permissions": [
     "http://*/*",

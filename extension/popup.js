@@ -185,6 +185,18 @@ function setupEventListeners() {
       }
     }
   });
+
+  // 监听来自 background 的消息
+  chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    if (message.action === 'createDownloadTask') {
+      handleQuickDownload(message.url, message.output);
+      sendResponse({ success: true });
+    } else if (message.action === 'showNotification') {
+      showToast(message.message, message.type);
+      sendResponse({ success: true });
+    }
+    return true; // 保持消息通道开启
+  });
 }
 
 // 显示添加任务模态框
@@ -253,6 +265,42 @@ async function handleAddTask(e) {
       await loadTaskList();
     } else {
       showToast(`提交失败：${result.error || '未知错误'}`, 'error');
+    }
+  } catch (error) {
+    showToast(`请求失败：${error.message}`, 'error');
+  }
+}
+
+// 快速下载（用于右键菜单）
+async function handleQuickDownload(url, output) {
+  if (!url) {
+    showToast('无效的链接', 'error');
+    return;
+  }
+
+  const taskData = {
+    url: url,
+    threads: config.defaultThreads || 8,
+    output: output || 'video.mp4',
+    keep_cache: false
+  };
+
+  try {
+    const response = await fetch(`${getApiBaseUrl()}/api/download`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(taskData)
+    });
+
+    const result = await response.json();
+
+    if (result.success) {
+      showToast(`任务已创建：${output}`, 'success');
+      await loadTaskList();
+    } else {
+      showToast(`创建失败：${result.error || '未知错误'}`, 'error');
     }
   } catch (error) {
     showToast(`请求失败：${error.message}`, 'error');
