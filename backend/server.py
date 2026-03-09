@@ -92,24 +92,14 @@ def _create_task_from_request(data: dict) -> tuple:
 
 
 def _handle_existing_task(task) -> Optional[dict]:
-    """处理已存在的任务，返回响应或 None 表示可以继续"""
-    status = task.progress.status
+    """
+    处理已存在的任务（同一 URL 只能有一个任务）
 
-    if status == TaskStatus.FAILED:
-        # 重启失败任务
-        logger.info(f"发现失败任务 {task.task_id}，重新启动")
-        task.progress.status = TaskStatus.PENDING
-        task.progress.error = None
-        task.progress.progress_percent = 0.0
-        task.progress.current_step = "等待重启"
-        task._cancel_flag = False
-        task_manager.start_task(task.task_id)
-        return {
-            "success": True,
-            "task_id": task.task_id,
-            "status": "pending",
-            "message": "失败任务已重启"
-        }
+    - 如果任务正在运行中，返回提示
+    - 如果任务已完成，返回提示（不重启）
+    - 如果任务失败/取消，重启任务（重试逻辑）
+    """
+    status = task.progress.status
 
     if status in [TaskStatus.PENDING, TaskStatus.PARSING, TaskStatus.DOWNLOADING, TaskStatus.MERGING]:
         logger.info(f"任务已存在且正在运行：{task.task_id}, 状态={status}")
@@ -120,12 +110,28 @@ def _handle_existing_task(task) -> Optional[dict]:
             "existing_status": status.value
         }
 
-    logger.info(f"任务已存在：{task.task_id}, 状态={status}")
+    if status == TaskStatus.COMPLETED:
+        logger.info(f"任务已完成：{task.task_id}，忽略重复请求")
+        return {
+            "success": True,
+            "task_id": task.task_id,
+            "status": "completed",
+            "message": "任务已完成"
+        }
+
+    # 任务失败或取消，重启任务（重试逻辑）
+    logger.info(f"任务已结束（{status}），重启：{task.task_id}")
+    task.progress.status = TaskStatus.PENDING
+    task.progress.error = None
+    task.progress.progress_percent = 0.0
+    task.progress.current_step = "等待重启"
+    task._cancel_flag = False
+    task_manager.start_task(task.task_id)
     return {
-        "success": False,
-        "error": f"任务已存在：{task.task_id}",
-        "existing_task_id": task.task_id,
-        "existing_status": status.value
+        "success": True,
+        "task_id": task.task_id,
+        "status": "pending",
+        "message": "任务已重启"
     }
 
 
@@ -145,7 +151,8 @@ async def download():
 
         logger.info(f"收到下载请求：URL={data['url']}")
 
-        existing_task = task_manager.find_task_by_url(data['url'])
+        # task_id 即 cache_id（URL 的 MD5），直接查找是否已存在任务
+        existing_task = task_manager.get_task_by_id(data['url'])
         if existing_task:
             response = _handle_existing_task(existing_task)
             if response:
@@ -308,15 +315,8 @@ async def cache_delete(cache_id: str):
 
 
 def _get_task_cache_ids() -> set[str]:
-    """获取任务列表中所有任务对应的缓存 ID"""
-    return {
-        CacheManager(
-            temp_dir=task.config.temp_dir,
-            url=task.config.url,
-            keep_cache=task.config.keep_cache
-        ).cache_dir.name
-        for task in task_manager._tasks.values()
-    }
+    """获取任务列表中所有任务对应的缓存 ID（task_id 即 cache_id）"""
+    return set(task_manager._tasks.keys())
 
 
 @app.route('/api/cache/clear', methods=['POST'])

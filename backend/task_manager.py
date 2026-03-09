@@ -3,10 +3,13 @@
 """
 任务管理模块
 管理后台下载任务，分离前台 API 响应与后台任务执行
+
+注意：task_id 使用 URL 的 MD5 哈希值（与 cache_id 一致），
+这样同一 URL 的任务始终共享同一个 ID，避免重复创建。
 """
 
 import asyncio
-import uuid
+import hashlib
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
@@ -95,9 +98,9 @@ class TaskManager:
         self._tasks: Dict[str, DownloadTask] = {}
         self._task_futures: Dict[str, asyncio.Task] = {}
 
-    def find_task_by_url(self, url: str) -> Optional[DownloadTask]:
+    def get_task_by_id(self, url: str) -> Optional[DownloadTask]:
         """
-        根据 URL 查找任务
+        根据 URL 获取任务（task_id 为 URL 的 MD5 哈希）
 
         Args:
             url: m3u8 URL
@@ -105,10 +108,8 @@ class TaskManager:
         Returns:
             匹配的任务，如果不存在则返回 None
         """
-        for task in self._tasks.values():
-            if task.config.url == url:
-                return task
-        return None
+        task_id = hashlib.md5(url.encode()).hexdigest()[:16]
+        return self._tasks.get(task_id)
 
     def create_task(
         self,
@@ -137,7 +138,8 @@ class TaskManager:
         Returns:
             DownloadTask: 任务对象
         """
-        task_id = str(uuid.uuid4())[:8]
+        # 使用 URL 的 MD5 哈希值作为 task_id（与 cache_id 一致）
+        task_id = hashlib.md5(url.encode()).hexdigest()[:16]
 
         # 创建配置
         config = AppConfig(
@@ -159,7 +161,7 @@ class TaskManager:
 
         # 设置输出文件路径
         output_name = output_name or "video.mp4"
-        output_path = Path(config.output_dir) / cache_manager.cache_path.name / output_name
+        output_path = Path(config.output_dir) / cache_manager.cache_dir.name / output_name
         output_path.parent.mkdir(parents=True, exist_ok=True)
         config.output_file = str(output_path)
 

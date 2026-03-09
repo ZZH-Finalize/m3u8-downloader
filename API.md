@@ -161,10 +161,16 @@ Content-Type: application/json
 - 该接口是异步接口，提交任务后立即返回
 - 使用返回的 `task_id` 可通过 `/api/tasks/<task_id>` 查询进度
 - 下载过程包括：解析 m3u8、下载分片、合并为 MP4、清理分片
+- **注意**: `task_id` 是 URL 的 MD5 哈希值（前 16 位字符），与 `cache_id` 一致
+  - 同一 URL 多次提交下载请求时，会复用同一个 task_id
+  - 如果任务正在运行中，返回 "任务已存在且正在运行" 错误
+  - 如果任务已完成，返回 "任务已完成"，不会重复下载
+  - 如果任务失败或取消，会自动重启任务（重试逻辑）
 
 **状态码**
 - `200 OK`: 请求成功
 - `400 Bad Request`: 参数错误
+- `409 Conflict`: 任务已存在且正在运行
 - `500 Internal Server Error`: 服务器错误
 
 ---
@@ -684,8 +690,11 @@ print(f"默认线程数：{config['default_threads']}")
 1. **下载接口**：
    - `/api/download` 是异步接口，提交任务后立即返回 `task_id`
    - 使用 `--trace` 选项可以在提交任务后通过短轮询（0.5 秒间隔）跟踪进度
+   - **task_id 与 cache_id 的关系**：`task_id` 是 URL 的 MD5 哈希值（前 16 位字符），与 `cache_id` 完全一致
+     - 同一 URL 的下载任务始终共享同一个 task_id
+     - 可以使用 task_id 直接访问 `/api/cache/<task_id>` 获取缓存信息
 
-2. **缓存 ID 生成规则**：缓存 ID 是 m3u8 URL 的 MD5 哈希值的前 16 位字符。
+2. **缓存 ID 生成规则**：缓存 ID 是 m3u8 URL 的 MD5 哈希值的前 16 位字符（与 task_id 一致）。
 
 3. **线程数配置**：
    - 如果请求中未指定 `threads`，使用服务器启动时的 `--default-threads` 配置
