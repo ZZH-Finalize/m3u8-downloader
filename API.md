@@ -41,7 +41,6 @@ python backend/server.py [选项]
 | 端点 | 方法 | 说明 |
 |------|------|------|
 | `/api/tasks` | GET | 列出所有任务 |
-| `/api/task/list` | GET | 列出所有任务 ID 及进度（精简版） |
 | `/api/tasks/<id>` | GET | 查询任务状态 |
 | `/api/tasks/<id>` | DELETE | 取消/移除任务 |
 
@@ -186,79 +185,38 @@ GET /api/tasks
     "tasks": [
         {
             "task_id": "abc12345",
-            "url": "https://example.com/video.m3u8",
-            "progress": {
-                "status": "completed",
-                "progress_percent": 100.0,
-                "current_step": "完成",
-                "segments_downloaded": 100,
-                "total_segments": 100,
-                "error": null,
-                "result": null,
-                "created_at": "2024-01-01T12:00:00",
-                "started_at": "2024-01-01T12:00:01",
-                "completed_at": "2024-01-01T12:05:00"
-            }
-        }
-    ],
-    "total_count": 1
-}
-```
-
-**进度字段**
-| 字段 | 类型 | 说明 |
-|------|------|------|
-| `status` | string | 任务状态 (pending/parsing/downloading/merging/completed/failed/cancelled) |
-| `progress_percent` | float | 进度百分比 (0-100) |
-| `current_step` | string | 当前步骤描述 |
-| `segments_downloaded` | int | 已下载分片数 |
-| `total_segments` | int | 总分片数 |
-| `error` | string | 错误信息（失败时） |
-| `result` | object | 最终结果（完成时） |
-| `created_at` | string | 任务创建时间 |
-| `started_at` | string | 任务开始时间 |
-| `completed_at` | string | 任务完成时间 |
-
-**状态码**
-- `200 OK`: 成功
-
----
-
-### 6. 列出所有任务 ID 及进度（精简版）
-
-获取所有任务 ID 及下载进度（精简信息）。
-
-**请求**
-```http
-GET /api/task/list
-```
-
-**响应**
-```json
-{
-    "success": true,
-    "tasks": [
-        {
-            "task_id": "abc12345",
             "segments_downloaded": 45,
-            "total_segments": 100
+            "total_segments": 100,
+            "output_name": "video.mp4"
         },
         {
             "task_id": "def67890",
             "segments_downloaded": 100,
-            "total_segments": 100
+            "total_segments": 100,
+            "output_name": "movie.mp4"
         }
     ],
     "total_count": 2
 }
 ```
 
+**响应字段**
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `success` | boolean | 是否成功 |
+| `tasks` | array | 任务列表 |
+| `tasks[].task_id` | string | 任务 ID |
+| `tasks[].segments_downloaded` | int | 已下载分片数 |
+| `tasks[].total_segments` | int | 总分片数 |
+| `tasks[].output_name` | string | 输出文件名 |
+| `total_count` | int | 任务总数 |
+
 **状态码**
 - `200 OK`: 成功
 
 ---
 
-### 7. 查询任务状态
+### 5. 查询任务状态
 
 获取指定任务的当前状态和进度。
 
@@ -278,6 +236,7 @@ GET /api/tasks/<task_id>
     "success": true,
     "task_id": "abc12345",
     "url": "https://example.com/video.m3u8",
+    "output_name": "video.mp4",
     "progress": {
         "status": "downloading",
         "progress_percent": 45.5,
@@ -293,13 +252,32 @@ GET /api/tasks/<task_id>
 }
 ```
 
+**响应字段**
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `success` | boolean | 是否成功 |
+| `task_id` | string | 任务 ID |
+| `url` | string | 原始 m3u8 URL |
+| `output_name` | string | 输出文件名 |
+| `progress` | object | 任务进度信息 |
+| `progress.status` | string | 任务状态 (pending/parsing/downloading/merging/completed/failed/cancelled) |
+| `progress.progress_percent` | float | 进度百分比 (0-100) |
+| `progress.current_step` | string | 当前步骤描述 |
+| `progress.segments_downloaded` | int | 已下载分片数 |
+| `progress.total_segments` | int | 总分片数 |
+| `progress.error` | string | 错误信息（失败时） |
+| `progress.result` | object | 最终结果（完成时） |
+| `progress.created_at` | string | 任务创建时间 |
+| `progress.started_at` | string | 任务开始时间 |
+| `progress.completed_at` | string | 任务完成时间 |
+
 **状态码**
 - `200 OK`: 成功
 - `404 Not Found`: 任务不存在
 
 ---
 
-### 8. 取消/移除任务
+### 6. 取消/移除任务
 
 取消正在执行的任务或移除已结束的任务。
 
@@ -344,7 +322,7 @@ DELETE /api/tasks/<task_id>
 
 ---
 
-### 9. 列出所有缓存
+### 7. 列出所有缓存
 
 获取所有缓存的视频信息。
 
@@ -391,7 +369,7 @@ GET /api/cache/list
 
 ---
 
-### 10. 获取缓存详情
+### 8. 获取缓存详情
 
 获取指定缓存的详细信息。
 
@@ -443,7 +421,7 @@ GET /api/cache/<cache_id>
 
 ---
 
-### 11. 删除指定缓存
+### 9. 删除指定缓存
 
 删除单个缓存及其所有文件。
 
@@ -480,7 +458,7 @@ DELETE /api/cache/<cache_id>
 
 ---
 
-### 12. 清空所有缓存
+### 10. 清空所有缓存
 
 删除所有缓存。
 
@@ -510,7 +488,7 @@ POST /api/cache/clear
 
 ---
 
-### 13. 更新缓存元数据
+### 11. 更新缓存元数据
 
 重新下载 m3u8 文件并更新缓存元数据。
 

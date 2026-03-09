@@ -179,6 +179,23 @@ class TaskManager:
         """获取任务"""
         return self._tasks.get(task_id)
 
+    def _get_output_name_from_cache(self, task: DownloadTask) -> str:
+        """从缓存中获取任务的输出文件名"""
+        # 优先从缓存元数据获取
+        try:
+            cache_manager = CacheManager(
+                temp_dir=task.config.temp_dir,
+                url=task.config.url,
+                keep_cache=task.config.keep_cache
+            )
+            metadata = cache_manager.load_metadata()
+            if metadata and metadata.output_name:
+                return metadata.output_name
+        except Exception as e:
+            logger.debug(f"获取输出文件名失败：{e}")
+        # 从 output_file 路径提取
+        return Path(task.config.output_file).name
+
     def get_task_status(self, task_id: str) -> Optional[dict]:
         """获取任务状态"""
         task = self._tasks.get(task_id)
@@ -187,20 +204,23 @@ class TaskManager:
                 "success": True,
                 "task_id": task_id,
                 "url": task.config.url,
-                "progress": task.progress.to_dict()
+                "progress": task.progress.to_dict(),
+                "output_name": self._get_output_name_from_cache(task)
             }
         return None
 
     def list_tasks(self) -> list:
         """列出所有任务"""
-        return [
-            {
+        result = []
+        for task in self._tasks.values():
+            task_data = {
                 "task_id": task.task_id,
                 "url": task.config.url,
-                "progress": task.progress.to_dict()
+                "progress": task.progress.to_dict(),
+                "output_name": self._get_output_name_from_cache(task)
             }
-            for task in self._tasks.values()
-        ]
+            result.append(task_data)
+        return result
 
     def cancel_task(self, task_id: str) -> bool:
         """取消任务"""
@@ -261,6 +281,9 @@ class TaskManager:
             parse_result = await self._execute_parse(task_id, config, cache_manager)
             if not parse_result:
                 return self._create_cancelled_result(task)
+
+            # 保存输出文件名到缓存元数据
+            self._save_output_name_to_cache(cache_manager, config.output_file)
 
             # 2. 下载分片
             download_success = await self._execute_download(
@@ -419,6 +442,18 @@ class TaskManager:
     def _create_cancelled_result(self, task: DownloadTask) -> dict:
         """创建取消结果"""
         return {"success": False, "error": "任务已取消", "cancelled": True}
+
+    def _save_output_name_to_cache(self, cache_manager: CacheManager, output_file: str) -> None:
+        """
+        保存输出文件名到缓存元数据
+
+        Args:
+            cache_manager: 缓存管理器实例
+            output_file: 输出文件路径
+        """
+        output_name = Path(output_file).name
+        cache_manager.update_metadata_output_name(output_name)
+        logger.debug(f"输出文件名已保存到缓存：{output_name}")
 
 
 # 全局任务管理器实例

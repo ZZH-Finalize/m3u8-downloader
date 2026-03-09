@@ -134,14 +134,21 @@ GET /health
 # 1. 提交异步下载任务
 curl -X POST http://127.0.0.1:6900/api/download \
   -H "Content-Type: application/json" \
-  -d '{"url": "https://example.com/video.m3u8"}'
+  -d '{"url": "https://example.com/video.m3u8", "output": "video.mp4"}'
 
 # 返回：{"success": true, "task_id": "abc12345", "status": "pending"}
 
-# 2. 查询任务进度
+# 2. 列出所有任务
+curl http://127.0.0.1:6900/api/tasks
+
+# 返回：{"success": true, "tasks": [{"task_id": "abc12345", "segments_downloaded": 45, "total_segments": 100, "output_name": "video.mp4"}], "total_count": 1}
+
+# 3. 查询任务进度
 curl http://127.0.0.1:6900/api/tasks/abc12345
 
-# 3. 取消任务
+# 返回：{"success": true, "task_id": "abc12345", "url": "https://example.com/video.m3u8", "output_name": "video.mp4", "progress": {...}}
+
+# 4. 取消任务
 curl -X DELETE http://127.0.0.1:6900/api/tasks/abc12345
 ```
 

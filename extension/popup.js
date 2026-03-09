@@ -224,7 +224,6 @@ function hideAddTaskModal() {
 async function showSettingsModal() {
   applyConfigToUI();
   elements.settingsModal.style.display = 'flex';
-  await checkServerStatus();
 }
 
 // 隐藏设置模态框
@@ -351,12 +350,8 @@ async function loadTaskList() {
     }
   } catch (error) {
     console.error('加载任务列表失败:', error);
-    // 请求失败意味着服务器离线，停止自动刷新
-    isServerOnline = false;
-    updateButtonStates();
-    updateServerStatusUI();
-    stopAutoRefresh();
-    renderOfflineState();
+    // 请求失败时不更新服务器状态，直接显示空状态
+    renderEmptyState();
   }
 }
 
@@ -419,15 +414,19 @@ function renderTaskList(tasks) {
 
 // 判断任务是否需要更新
 function shouldUpdateTask(element, task) {
-  const progress = task.progress || {};
   const existingStatus = element.dataset.status;
   const existingPercent = element.dataset.progressPercent;
   const existingDownloaded = element.dataset.segmentsDownloaded;
 
+  const segmentsDownloaded = task.segments_downloaded || 0;
+  const totalSegments = task.total_segments || 0;
+  const progressPercent = totalSegments > 0 ? (segmentsDownloaded / totalSegments) * 100 : 0;
+  const status = task.status || 'downloading';
+
   return (
-    existingStatus !== (progress.status || '') ||
-    existingPercent !== String(progress.progress_percent || 0) ||
-    existingDownloaded !== String(progress.segments_downloaded || 0)
+    existingStatus !== status ||
+    existingPercent !== String(progressPercent) ||
+    existingDownloaded !== String(segmentsDownloaded)
   );
 }
 
@@ -436,19 +435,15 @@ function createTaskElement(task) {
   const div = document.createElement('div');
   div.className = 'task-item';
   div.dataset.taskId = task.task_id;
-  
-  const progress = task.progress || {};
-  const statusClass = progress.status || 'pending';
-  const progressPercent = progress.progress_percent || 0;
-  const currentStep = progress.current_step || '等待中';
-  const segmentsDownloaded = progress.segments_downloaded || 0;
-  const totalSegments = progress.total_segments || 0;
-  const createdAt = progress.created_at ? formatTime(progress.created_at) : '';
-  const completedAt = progress.completed_at ? formatTime(progress.completed_at) : '';
-  const error = progress.error || '';
+
+  const segmentsDownloaded = task.segments_downloaded || 0;
+  const totalSegments = task.total_segments || 0;
+  const progressPercent = totalSegments > 0 ? (segmentsDownloaded / totalSegments) * 100 : 0;
+  const outputName = task.output_name || 'video.mp4';
+  const status = task.status || 'downloading';
 
   // 存储当前状态用于比较
-  div.dataset.status = statusClass;
+  div.dataset.status = status;
   div.dataset.progressPercent = String(progressPercent);
   div.dataset.segmentsDownloaded = String(segmentsDownloaded);
 
@@ -457,8 +452,8 @@ function createTaskElement(task) {
   }
 
   // 失败任务添加重试按钮
-  const retryButton = statusClass === 'failed' ? `
-    <button class="retry-btn" title="重试下载" data-task-id="${task.task_id}" data-task-url="${escapeHtmlForAttr(task.url)}">
+  const retryButton = status === 'failed' ? `
+    <button class="retry-btn" title="重试下载" data-task-id="${task.task_id}" data-task-url="${escapeHtmlForAttr(task.url)}" data-task-output="${escapeHtmlForAttr(task.output_name)}">
       ↻ 重试
     </button>
   ` : '';
@@ -466,9 +461,9 @@ function createTaskElement(task) {
   div.innerHTML = `
     <div class="task-header">
       <span class="task-id">${task.task_id}</span>
-      <span class="task-status ${statusClass}">${getStatusText(statusClass)}</span>
+      <span class="task-status ${status}">${getStatusText(status)}</span>
     </div>
-    <div class="task-url">${escapeHtml(task.url || '未知 URL')}</div>
+    <div class="task-output">${escapeHtml(outputName)}</div>
     <div class="task-progress">
       <div class="progress-bar-container">
         <div class="progress-bar" style="width: ${progressPercent}%"></div>
@@ -477,9 +472,7 @@ function createTaskElement(task) {
         <span class="progress-text">${progressPercent.toFixed(1)}%</span>
         <span class="segments-info">${segmentsDownloaded}/${totalSegments}</span>
       </div>
-      <div class="task-step">${escapeHtml(currentStep)}</div>
-      ${error ? `<div class="task-error" title="${escapeHtmlForAttr(error)}">错误：${escapeHtml(error)}</div>` : ''}
-      ${createdAt ? `<div class="task-time">创建：${createdAt}${completedAt ? ` | 完成：${completedAt}` : ''}</div>` : ''}
+      <div class="task-step">${escapeHtml(getStatusText(status))}</div>
       ${retryButton}
     </div>
   `;
@@ -506,7 +499,8 @@ function createTaskElement(task) {
       e.stopPropagation();
       const taskId = retryBtn.dataset.taskId;
       const url = retryBtn.dataset.taskUrl;
-      retryTask(taskId, url);
+      const output = retryBtn.dataset.taskOutput;
+      retryTask(taskId, url, output);
     });
   }
 
@@ -529,24 +523,22 @@ function getStatusText(status) {
 
 // 更新任务元素（只更新变化的部分）
 function updateTaskElement(element, task) {
-  const progress = task.progress || {};
-  const statusClass = progress.status || 'pending';
-  const progressPercent = progress.progress_percent || 0;
-  const currentStep = progress.current_step || '等待中';
-  const segmentsDownloaded = progress.segments_downloaded || 0;
-  const totalSegments = progress.total_segments || 0;
-  const error = progress.error || '';
+  const segmentsDownloaded = task.segments_downloaded || 0;
+  const totalSegments = task.total_segments || 0;
+  const progressPercent = totalSegments > 0 ? (segmentsDownloaded / totalSegments) * 100 : 0;
+  const outputName = task.output_name || 'video.mp4';
+  const status = task.status || 'downloading';
 
   // 更新状态标记
-  element.dataset.status = statusClass;
+  element.dataset.status = status;
   element.dataset.progressPercent = String(progressPercent);
   element.dataset.segmentsDownloaded = String(segmentsDownloaded);
 
   // 更新状态标签
   const statusEl = element.querySelector('.task-status');
   if (statusEl) {
-    statusEl.className = `task-status ${statusClass}`;
-    statusEl.textContent = getStatusText(statusClass);
+    statusEl.className = `task-status ${status}`;
+    statusEl.textContent = getStatusText(status);
   }
 
   // 更新进度条
@@ -570,34 +562,18 @@ function updateTaskElement(element, task) {
   // 更新当前步骤
   const taskStep = element.querySelector('.task-step');
   if (taskStep) {
-    taskStep.textContent = escapeHtml(currentStep);
+    taskStep.textContent = escapeHtml(getStatusText(status));
   }
 
-  // 更新或添加错误信息
-  let errorEl = element.querySelector('.task-error');
-  if (error) {
-    if (!errorEl) {
-      const progressContainer = element.querySelector('.task-progress');
-      if (progressContainer) {
-        errorEl = document.createElement('div');
-        errorEl.className = 'task-error';
-        const taskStepEl = progressContainer.querySelector('.task-step');
-        if (taskStepEl) {
-          taskStepEl.after(errorEl);
-        }
-      }
-    }
-    if (errorEl) {
-      errorEl.title = escapeHtmlForAttr(error);
-      errorEl.textContent = `错误：${escapeHtml(error)}`;
-    }
-  } else if (errorEl) {
-    errorEl.remove();
+  // 更新输出文件名
+  const taskOutput = element.querySelector('.task-output');
+  if (taskOutput) {
+    taskOutput.textContent = escapeHtml(outputName);
   }
 
   // 更新或添加重试按钮
   let retryBtn = element.querySelector('.retry-btn');
-  if (statusClass === 'failed') {
+  if (status === 'failed') {
     if (!retryBtn) {
       const progressContainer = element.querySelector('.task-progress');
       if (progressContainer) {
@@ -606,12 +582,14 @@ function updateTaskElement(element, task) {
         retryBtn.title = '重试下载';
         retryBtn.dataset.taskId = task.task_id;
         retryBtn.dataset.taskUrl = task.url;
+        retryBtn.dataset.taskOutput = task.output_name;
         retryBtn.innerHTML = `↻ 重试`;
         retryBtn.addEventListener('click', (e) => {
           e.stopPropagation();
           const taskId = retryBtn.dataset.taskId;
           const url = retryBtn.dataset.taskUrl;
-          retryTask(taskId, url);
+          const output = retryBtn.dataset.taskOutput;
+          retryTask(taskId, url, output);
         });
         progressContainer.appendChild(retryBtn);
       }
@@ -619,6 +597,7 @@ function updateTaskElement(element, task) {
       // 更新已存在按钮的数据属性
       retryBtn.dataset.taskId = task.task_id;
       retryBtn.dataset.taskUrl = task.url;
+      retryBtn.dataset.taskOutput = task.output_name;
     }
   } else if (retryBtn) {
     retryBtn.remove();
@@ -626,7 +605,7 @@ function updateTaskElement(element, task) {
 }
 
 // 重试任务
-async function retryTask(taskId, url) {
+async function retryTask(taskId, url, output) {
   if (!confirm(`确定要重试任务 ${taskId} 吗？`)) {
     return;
   }
@@ -634,7 +613,7 @@ async function retryTask(taskId, url) {
   const taskData = {
     url: url,
     threads: config.defaultThreads,
-    output: 'video.mp4'
+    output: output || 'video.mp4'
   };
 
   try {
@@ -807,9 +786,14 @@ async function checkServerStatus() {
 
   try {
     const response = await fetch(`${getApiBaseUrl()}/health`);
+    
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+    
     const result = await response.json();
 
-    if (result.status === 'healthy') {
+    if (result && result.status === 'healthy') {
       statusIndicator.className = 'status-indicator online';
       statusText.textContent = `服务器在线 (${protocol}://${config.host}:${config.port})`;
       isServerOnline = true;
@@ -821,6 +805,7 @@ async function checkServerStatus() {
       throw new Error('服务状态异常');
     }
   } catch (error) {
+    console.error('检查服务器状态失败:', error);
     statusIndicator.className = 'status-indicator offline';
     statusText.textContent = `服务器离线 (${protocol}://${config.host}:${config.port})`;
     isServerOnline = false;
@@ -915,11 +900,9 @@ function startAutoRefresh() {
   stopAutoRefresh();  // 先停止之前的定时器
   if (config.autoRefresh > 0 && isServerOnline) {
     autoRefreshTimer = setInterval(() => {
-      // 自动刷新时如果检测到离线，停止定时器
-      loadTaskList().then(() => {
-        if (!isServerOnline && autoRefreshTimer) {
-          stopAutoRefresh();
-        }
+      // 自动刷新时 API 请求失败，调用 checkServerStatus 更新服务器状态
+      loadTaskList().catch(() => {
+        checkServerStatus();
       });
     }, config.autoRefresh);
   }
@@ -970,9 +953,9 @@ function hideCacheDetailModal() {
 // 获取正在执行任务的 cache ID 集合（根据 URL 生成 MD5）
 async function loadActiveTaskCacheIds() {
   try {
-    const response = await fetch(`${getApiBaseUrl()}/api/task/list`);
+    const response = await fetch(`${getApiBaseUrl()}/api/tasks`);
     const result = await response.json();
-    
+
     activeTaskCacheIds.clear();
     if (result.success && result.tasks) {
       for (const task of result.tasks) {

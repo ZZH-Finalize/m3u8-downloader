@@ -47,6 +47,7 @@ class MetaData:
     优化格式：
     - filenames: 只保存文件名列表（不包含完整 URL）
     - downloaded_mask: 位掩码，标注已下载的分片（1=已下载，0=未下载）
+    - output_name: 输出文件名
     """
     url: str  # 原始 m3u8 URL
     base_url: str  # 基准 URL
@@ -54,6 +55,7 @@ class MetaData:
     downloaded_mask: int = 0  # 已下载分片的位掩码
     created_at: str = ""  # 创建时间 (ISO 格式)
     version: str = "1.0"  # 元数据版本
+    output_name: Optional[str] = None  # 输出文件名
 
     # 分片数量上限
     MAX_SEGMENTS = 10000  # bitmask 最大容纳 10000 个分片
@@ -126,7 +128,8 @@ class MetaData:
             "base_url": self.base_url,
             "filenames": self.filenames,
             "downloaded_mask": self.downloaded_mask,
-            "created_at": self.created_at
+            "created_at": self.created_at,
+            "output_name": self.output_name
         }
 
     @classmethod
@@ -138,7 +141,8 @@ class MetaData:
             base_url=data["base_url"],
             filenames=data["filenames"],
             downloaded_mask=data.get("downloaded_mask", 0),
-            created_at=data.get("created_at", "")
+            created_at=data.get("created_at", ""),
+            output_name=data.get("output_name")
         )
 
     def get_downloaded_count(self) -> int:

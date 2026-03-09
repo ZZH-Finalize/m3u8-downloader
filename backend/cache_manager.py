@@ -335,6 +335,27 @@ class CacheManager:
         logger.debug(f"元数据 downloaded_mask 已更新：{bin(new_mask)}")
         return metadata
 
+    def update_metadata_output_name(self, output_name: str) -> Optional[MetaData]:
+        """
+        更新元数据中的 output_name
+
+        Args:
+            output_name: 输出文件名
+
+        Returns:
+            更新后的元数据对象，如果元数据不存在则返回 None
+        """
+        metadata = self.load_metadata()
+        if not metadata:
+            return None
+
+        metadata.output_name = output_name
+
+        # 保存更新后的元数据
+        self.save_metadata(metadata)
+        logger.debug(f"元数据 output_name 已更新：{output_name}")
+        return metadata
+
     def load_metadata(self) -> Optional[MetaData]:
         """
         从缓存目录加载元数据

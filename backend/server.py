@@ -168,40 +168,8 @@ async def download():
         return jsonify({"success": False, "error": str(e)}), 500
 
 
-@app.route('/api/download/sync', methods=['POST'])
-async def download_sync():
-    """同步下载（等待完成）- 用于兼容旧 API"""
-    try:
-        data = await request.get_json()
-
-        valid, error_response = _validate_download_request(data)
-        if not valid:
-            return jsonify(error_response), 400
-
-        logger.info(f"收到同步下载请求：URL={data['url']}")
-
-        task = _create_task_from_request(data)
-        result = await task_manager.execute_task(task)
-
-        if result.get("success"):
-            return jsonify(result)
-        else:
-            return jsonify(result), 500 if not result.get("cancelled") else 400
-
-    except Exception as e:
-        logger.error(f"处理同步下载请求时发生错误：{e}")
-        return jsonify({"success": False, "error": str(e)}), 500
-
-
 @app.route('/api/tasks', methods=['GET'])
 async def list_tasks():
-    """列出所有任务"""
-    tasks = task_manager.list_tasks()
-    return jsonify({"success": True, "tasks": tasks, "total_count": len(tasks)})
-
-
-@app.route('/api/task/list', methods=['GET'])
-async def list_task_ids():
     """列出所有任务 ID 及下载进度"""
     tasks = task_manager.list_tasks()
 
@@ -209,7 +177,9 @@ async def list_task_ids():
         {
             "task_id": task["task_id"],
             "segments_downloaded": task["progress"].get("segments_downloaded", 0),
-            "total_segments": task["progress"].get("total_segments", 0)
+            "total_segments": task["progress"].get("total_segments", 0),
+            "output_name": task["output_name"],
+            "status": task["progress"].get("status", "pending")
         }
         for task in tasks
     ]
@@ -439,7 +409,6 @@ API 端点:
   GET  /api/tasks               - 列出所有任务
   GET  /api/tasks/<id>          - 查询任务状态
   DELETE /api/tasks/<id>        - 删除任务（运行中则先取消再删除，已结束则直接删除）
-  POST /api/download/sync       - 同步下载（兼容旧 API）
         """
     )
     parser.add_argument(
