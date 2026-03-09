@@ -161,7 +161,7 @@ class TaskManager:
 
         # 设置输出文件路径
         output_name = output_name or "video.mp4"
-        output_path = Path(config.output_dir) / cache_manager.cache_dir.name / output_name
+        output_path = Path(config.output_dir) / output_name
         output_path.parent.mkdir(parents=True, exist_ok=True)
         config.output_file = str(output_path)
 

@@ -23,6 +23,30 @@ class MediaPostprocessor:
         self.output_file = config.output_file
         self.ffmpeg_path = config.ffmpeg_path
 
+    def _get_unique_output_path(self, output_path: Path) -> Path:
+        """
+        获取唯一的输出文件路径，如果文件已存在则添加后缀
+
+        Args:
+            output_path: 原始输出路径
+
+        Returns:
+            不重复的输出路径
+        """
+        if not output_path.exists():
+            return output_path
+
+        stem = output_path.stem
+        suffix = output_path.suffix
+        parent = output_path.parent
+
+        counter = 1
+        while True:
+            new_path = parent / f"{stem}_{counter}{suffix}"
+            if not new_path.exists():
+                return new_path
+            counter += 1
+
     async def merge(self, segment_paths: list[Path]) -> MergeResult:
         """
         异步合并分片并转换为 mp4
@@ -45,14 +69,20 @@ class MediaPostprocessor:
         project_root = Path(__file__).resolve().parent.parent
         temp_list_file = self._create_ffmpeg_list_file(segment_paths)
 
+        # 获取唯一的输出文件路径（避免覆盖已存在的文件）
+        output_path = Path(self.output_file).resolve()
+        output_path = self._get_unique_output_path(output_path)
+        # 更新配置中的输出文件路径
+        self.config.output_file = str(output_path)
+
         logger.info(f"正在合并 {len(segment_paths)} 个分片并转换为 mp4...")
         success = await self._run_ffmpeg(temp_list_file, project_root)
 
         temp_list_file.unlink(missing_ok=True)
 
         if success:
-            logger.info(f"合并完成：{self.output_file}")
-            return MergeResult(success=True, output_path=self.output_file)
+            logger.info(f"合并完成：{output_path}")
+            return MergeResult(success=True, output_path=str(output_path))
         else:
             logger.error("ffmpeg 执行失败")
             return MergeResult(success=False, error="ffmpeg 执行失败")
@@ -102,7 +132,7 @@ class MediaPostprocessor:
             list_file: 分片列表文件路径（系统临时目录）
             work_dir: 工作目录（ffmpeg 运行目录）
         """
-        output_path = Path(self.output_file).resolve()
+        output_path = Path(self.config.output_file).resolve()
 
         cmd = [
             self.ffmpeg_path,
