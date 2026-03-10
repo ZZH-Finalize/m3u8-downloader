@@ -453,7 +453,7 @@ function createTaskElement(task) {
 
   // 失败任务添加重试按钮
   const retryButton = status === 'failed' ? `
-    <button class="retry-btn" title="重试下载" data-task-id="${task.task_id}" data-task-url="${escapeHtmlForAttr(task.url)}" data-task-output="${escapeHtmlForAttr(task.output_name)}">
+    <button class="retry-btn" title="重试下载" data-task-id="${task.task_id}">
       ↻ 重试
     </button>
   ` : '';
@@ -498,9 +498,7 @@ function createTaskElement(task) {
     retryBtn.addEventListener('click', (e) => {
       e.stopPropagation();
       const taskId = retryBtn.dataset.taskId;
-      const url = retryBtn.dataset.taskUrl;
-      const output = retryBtn.dataset.taskOutput;
-      retryTask(taskId, url, output);
+      retryTask(taskId);
     });
   }
 
@@ -581,23 +579,14 @@ function updateTaskElement(element, task) {
         retryBtn.className = 'retry-btn';
         retryBtn.title = '重试下载';
         retryBtn.dataset.taskId = task.task_id;
-        retryBtn.dataset.taskUrl = task.url;
-        retryBtn.dataset.taskOutput = task.output_name;
         retryBtn.innerHTML = `↻ 重试`;
         retryBtn.addEventListener('click', (e) => {
           e.stopPropagation();
           const taskId = retryBtn.dataset.taskId;
-          const url = retryBtn.dataset.taskUrl;
-          const output = retryBtn.dataset.taskOutput;
-          retryTask(taskId, url, output);
+          retryTask(taskId);
         });
         progressContainer.appendChild(retryBtn);
       }
-    } else {
-      // 更新已存在按钮的数据属性
-      retryBtn.dataset.taskId = task.task_id;
-      retryBtn.dataset.taskUrl = task.url;
-      retryBtn.dataset.taskOutput = task.output_name;
     }
   } else if (retryBtn) {
     retryBtn.remove();
@@ -605,33 +594,56 @@ function updateTaskElement(element, task) {
 }
 
 // 重试任务
-async function retryTask(taskId, url, output) {
+async function retryTask(taskId) {
   if (!confirm(`确定要重试任务 ${taskId} 吗？`)) {
     return;
   }
 
-  const taskData = {
-    url: url,
-    threads: config.defaultThreads,
-    output: output || 'video.mp4'
-  };
-
   try {
-    const response = await fetch(`${getApiBaseUrl()}/api/download`, {
+    // 先查询任务详情获取 URL
+    const response = await fetch(`${getApiBaseUrl()}/api/tasks/${taskId}`);
+    
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+    
+    const result = await response.json();
+    
+    if (!result.success) {
+      showToast(`获取任务详情失败：${result.error || '未知错误'}`, 'error');
+      return;
+    }
+    
+    const url = result.url;
+    const output = result.output_name || 'video.mp4';
+    
+    if (!url) {
+      showToast('无法获取任务 URL', 'error');
+      return;
+    }
+    
+    // 使用获取到的 URL 提交下载请求
+    const taskData = {
+      url: url,
+      threads: config.defaultThreads,
+      output: output
+    };
+    
+    const downloadResponse = await fetch(`${getApiBaseUrl()}/api/download`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
       },
       body: JSON.stringify(taskData)
     });
-
-    const result = await response.json();
-
-    if (result.success) {
-      showToast(`重试任务已提交：${result.task_id}`, 'success');
+    
+    const downloadResult = await downloadResponse.json();
+    
+    if (downloadResult.success) {
+      showToast(`重试任务已提交：${downloadResult.task_id}`, 'success');
       await loadTaskList();
     } else {
-      showToast(`重试失败：${result.error || '未知错误'}`, 'error');
+      showToast(`重试失败：${downloadResult.error || '未知错误'}`, 'error');
     }
   } catch (error) {
     showToast(`请求失败：${error.message}`, 'error');
