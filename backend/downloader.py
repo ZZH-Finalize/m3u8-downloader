@@ -40,8 +40,8 @@ class SegmentDownloader:
         self._semaphore: Optional[asyncio.Semaphore] = None
         self._session: Optional[aiohttp.ClientSession] = None
         self._progress_callback = progress_callback  # 进度回调函数
-        self._completed_count = 0  # 已完成计数
-        self._total_count = 0  # 总数量
+        self._completed_count = 0  # 已完成计数（成功下载的分片数）
+        self._total_count = 0      # 总数量
 
     async def download_all(
         self,
@@ -268,9 +268,7 @@ class SegmentDownloader:
                 f"[{segment.index + 1}/{total}] 失败：{segment.filename} - {error_msg}"
             )
 
-            self._completed_count += 1
-            self._notify_progress()
-
+            # 下载失败时不增加计数
             return DownloadResult(
                 segment=segment,
                 success=False,

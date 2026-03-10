@@ -183,6 +183,7 @@ async def list_tasks():
     task_list = [
         {
             "task_id": task["task_id"],
+            "url": task["url"],
             "segments_downloaded": task["progress"].get("segments_downloaded", 0),
             "total_segments": task["progress"].get("total_segments", 0),
             "output_name": task["output_name"],
