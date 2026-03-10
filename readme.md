@@ -25,7 +25,7 @@ m3u8-downloader/
 │   └── icons/             # 图标文件
 │
 ├── tools/                  # 工具目录
-│   └── test_cli.py        # API 测试工具（开发调试用）
+│   └── test_cli.py        # CLI 测试工具（支持下载、任务管理、缓存管理）
 │
 ├── docker/                 # Docker 相关配置
 ├── requirements.txt       # 依赖列表
@@ -55,6 +55,8 @@ python backend/server.py
 - `--log-level`: 日志级别 DEBUG|INFO|WARNING|ERROR|CRITICAL (默认：INFO)
 - `--log-dir`: 日志目录 (默认：logs)
 - `--debug`: 启用调试模式（等同于 --log-level DEBUG）
+- `--temp-dir`: 临时分片目录 (默认：data/temp_segments)
+- `--output-dir`: 输出目录 (默认：output)
 
 示例：
 ```bash
@@ -67,42 +69,76 @@ python backend/server.py --default-threads 16 --log-level DEBUG
 
 ### 3. 使用 Edge 插件下载视频
 
-1. 打开 Edge 浏览器，访问 `edge://extensions/`
-2. 开启"开发人员模式"，点击"加载解压缩的扩展"
-3. 选择 `extension` 文件夹加载插件
-4. 确保后端服务已启动
-5. 点击浏览器工具栏中的插件图标，提交下载任务
+1. 从本项目的 [Release 页面](https://github.com/ZZH-Finalize/m3u8-downloader/releases) 下载打包好的 Edge 插件（`.zip` 文件）
+2. 打开 Edge 浏览器，访问 `edge://extensions/`
+3. 开启"开发人员模式"
+4. 直接拖拽到扩展页面安装
+5. 确保后端服务已启动
+6. 点击浏览器工具栏中的插件图标，提交下载任务
+
+![Edge 插件界面](imgs/main-page.png)
 
 详细说明请查看 [extension/README.md](extension/README.md)。
 
-## API 文档
+## API 简介
 
-完整的 API 文档请查看 [API.md](API.md)。
+提交异步下载任务，立即返回 `task_id`，后台异步执行。
 
-### 快速参考
-
-#### 下载视频
+**请求**
 ```http
 POST /api/download
+Content-Type: application/json
 ```
 
-#### 获取服务器配置
-```http
-GET /api/config
+**请求参数**
+| 字段 | 类型 | 必填 | 默认值 | 说明 |
+|------|------|------|--------|------|
+| `url` | string | 是 | - | m3u8 文件的 URL |
+| `threads` | int | 否 | `default_threads` | 下载并发数 |
+| `output` | string | 否 | `"video.mp4"` | 输出文件名 |
+| `max_rounds` | int | 否 | `5` | 最大下载轮次（重试次数） |
+| `keep_cache` | boolean | 否 | `false` | 是否保留缓存文件 |
+| `debug` | boolean | 否 | `false` | 是否启用调试日志 |
+
+**成功响应**
+```json
+{
+    "success": true,
+    "task_id": "abc12345",
+    "status": "pending",
+    "message": "任务已提交，后台执行中"
+}
 ```
 
-#### 缓存管理
-```http
-GET    /api/cache/list       # 列出所有缓存
-GET    /api/cache/<id>       # 获取缓存详情
-DELETE /api/cache/<id>       # 删除指定缓存
-POST   /api/cache/clear      # 清空所有缓存
-POST   /api/cache/update     # 更新缓存元数据
+**说明**
+- 该接口是异步接口，提交任务后立即返回
+- 使用返回的 `task_id` 可通过 `/api/tasks/<task_id>` 查询进度
+- `task_id` 是 URL 的 MD5 哈希值（前 16 位字符），与 `cache_id` 一致
+
+其余完整的 API 文档请查看 [API.md](API.md)。
+
+### 使用示例
+
+#### 使用 curl 提交下载任务
+
+```bash
+curl -X POST http://127.0.0.1:6900/api/download \
+  -H "Content-Type: application/json" \
+  -d '{
+    "url": "https://example.com/video.m3u8",
+    "threads": 8,
+    "output": "my_video.mp4"
+  }'
 ```
 
-#### 健康检查
-```http
-GET /health
+返回：
+```json
+{
+    "success": true,
+    "task_id": "abc12345",
+    "status": "pending",
+    "message": "任务已提交，后台执行中"
+}
 ```
 
 ## 架构说明
@@ -112,45 +148,6 @@ GET /health
 - **前台任务**：响应 API 请求（立即返回）
 - **后台任务**：下载分片、转码等（异步执行）
 - **任务管理器**：跟踪和管理所有后台任务
-
-### 技术栈
-
-- **后端框架**: Quart (Flask 的异步版本)
-- **HTTP 客户端**: aiohttp (异步 HTTP)
-- **任务管理**: asyncio 任务调度
-
-### API 端点
-
-| 端点 | 说明 |
-|------|------|
-| `POST /api/download` | 提交异步下载任务（立即返回 task_id） |
-| `GET /api/tasks` | 列出所有任务 |
-| `GET /api/tasks/<id>` | 查询任务状态/进度 |
-| `DELETE /api/tasks/<id>` | 取消任务 |
-
-### 使用示例
-
-```bash
-# 1. 提交异步下载任务
-curl -X POST http://127.0.0.1:6900/api/download \
-  -H "Content-Type: application/json" \
-  -d '{"url": "https://example.com/video.m3u8", "output": "video.mp4"}'
-
-# 返回：{"success": true, "task_id": "abc12345", "status": "pending"}
-
-# 2. 列出所有任务
-curl http://127.0.0.1:6900/api/tasks
-
-# 返回：{"success": true, "tasks": [{"task_id": "abc12345", "segments_downloaded": 45, "total_segments": 100, "output_name": "video.mp4"}], "total_count": 1}
-
-# 3. 查询任务进度
-curl http://127.0.0.1:6900/api/tasks/abc12345
-
-# 返回：{"success": true, "task_id": "abc12345", "url": "https://example.com/video.m3u8", "output_name": "video.mp4", "progress": {...}}
-
-# 4. 取消任务
-curl -X DELETE http://127.0.0.1:6900/api/tasks/abc12345
-```
 
 ## Docker 部署
 
@@ -281,7 +278,7 @@ docker inspect --format='{{.State.Health.Status}}' m3u8-downloader
 1. Docker 镜像已内置 ffmpeg，无需额外安装
 2. 后端服务需要保持运行才能使用 Edge 插件
 3. 默认情况下，下载完成后会清理分片文件，保留元数据
-4. `tools/test_cli.py` 仅用于开发调试，生产环境请使用 Edge 插件
+4. 完整的 API 文档请查看 [API.md](API.md)
 
 ## 许可证
 

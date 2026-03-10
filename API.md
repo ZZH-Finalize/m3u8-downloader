@@ -25,6 +25,8 @@ python backend/server.py [选项]
 | `--log-level` | `INFO` | 日志级别 (DEBUG/INFO/WARNING/ERROR/CRITICAL) |
 | `--log-dir` | `logs` | 日志目录 |
 | `--debug` | - | 启用调试模式（等同于 --log-level DEBUG） |
+| `--temp-dir` | `data/temp_segments` | 临时分片目录 |
+| `--output-dir` | `output` | 输出目录 |
 
 ---
 
@@ -42,7 +44,7 @@ python backend/server.py [选项]
 |------|------|------|
 | `/api/tasks` | GET | 列出所有任务 |
 | `/api/tasks/<id>` | GET | 查询任务状态 |
-| `/api/tasks/<id>` | DELETE | 取消/移除任务 |
+| `/api/tasks/<id>` | DELETE | 删除任务（运行中则先取消再删除，已结束则直接删除） |
 
 ### 缓存管理 API
 
@@ -50,8 +52,8 @@ python backend/server.py [选项]
 |------|------|------|
 | `/api/cache/list` | GET | 列出所有缓存 |
 | `/api/cache/<id>` | GET | 获取缓存详情 |
-| `/api/cache/<id>` | DELETE | 删除指定缓存 |
-| `/api/cache/clear` | POST | 清空所有缓存 |
+| `/api/cache/<id>` | DELETE | 删除指定缓存（如果缓存被任务引用则拒绝删除） |
+| `/api/cache/clear` | POST | 清空所有缓存（跳过正在被任务引用的缓存） |
 | `/api/cache/update` | POST | 更新缓存元数据 |
 
 ### 系统 API
@@ -283,9 +285,9 @@ GET /api/tasks/<task_id>
 
 ---
 
-### 6. 取消/移除任务
+### 6. 删除任务
 
-取消正在执行的任务或移除已结束的任务。
+删除任务。如果任务正在运行中，会先取消任务再删除；如果任务已结束（完成/失败/取消），则直接删除。
 
 **请求**
 ```http
@@ -297,19 +299,19 @@ DELETE /api/tasks/<task_id>
 |------|------|------|
 | `task_id` | string | 任务 ID |
 
-**成功响应（取消任务）**
+**成功响应（删除运行中的任务）**
 ```json
 {
     "success": true,
-    "message": "任务已取消：abc12345"
+    "message": "任务已删除：abc12345"
 }
 ```
 
-**成功响应（移除任务）**
+**成功响应（删除已结束的任务）**
 ```json
 {
     "success": true,
-    "message": "任务已移除：abc12345"
+    "message": "任务已删除：abc12345"
 }
 ```
 
@@ -317,13 +319,12 @@ DELETE /api/tasks/<task_id>
 ```json
 {
     "success": false,
-    "error": "任务不存在或已结束"
+    "error": "任务不存在"
 }
 ```
 
 **状态码**
-- `200 OK`: 取消/移除成功
-- `400 Bad Request`: 任务不存在或已结束
+- `200 OK`: 删除成功
 - `404 Not Found`: 任务不存在
 
 ---
@@ -429,7 +430,7 @@ GET /api/cache/<cache_id>
 
 ### 9. 删除指定缓存
 
-删除单个缓存及其所有文件。
+删除单个缓存及其所有文件。如果缓存正在被任务列表中的任务引用，则拒绝删除。
 
 **请求**
 ```http
@@ -449,7 +450,7 @@ DELETE /api/cache/<cache_id>
 }
 ```
 
-**失败响应**
+**失败响应（缓存不存在）**
 ```json
 {
     "success": false,
@@ -457,16 +458,26 @@ DELETE /api/cache/<cache_id>
 }
 ```
 
+**失败响应（缓存被任务引用）**
+```json
+{
+    "success": false,
+    "error": "缓存 74a993fffd15ddbe 正在被任务列表中的任务使用，无法删除",
+    "code": "CACHE_IN_USE"
+}
+```
+
 **状态码**
 - `200 OK`: 删除成功
 - `404 Not Found`: 缓存不存在
+- `409 Conflict`: 缓存正在被任务引用
 - `500 Internal Server Error`: 删除失败
 
 ---
 
 ### 10. 清空所有缓存
 
-删除所有缓存。
+删除所有缓存，但会跳过正在被任务列表中的任务引用的缓存。
 
 **请求**
 ```http
@@ -477,8 +488,9 @@ POST /api/cache/clear
 ```json
 {
     "success": true,
-    "deleted_count": 5,
-    "message": "已删除 5 个缓存"
+    "deleted_count": 3,
+    "skipped_count": 2,
+    "message": "已删除 3 个缓存，跳过 2 个（任务引用中）"
 }
 ```
 
@@ -487,6 +499,7 @@ POST /api/cache/clear
 |------|------|------|
 | `success` | boolean | 是否成功 |
 | `deleted_count` | int | 删除的缓存数量 |
+| `skipped_count` | int | 跳过的缓存数量（因任务引用） |
 | `message` | string | 结果消息 |
 
 **状态码**
@@ -604,7 +617,7 @@ curl http://127.0.0.1:6900/api/tasks
 curl http://127.0.0.1:6900/api/tasks/abc12345
 ```
 
-#### 5. 取消任务
+#### 5. 删除任务
 ```bash
 curl -X DELETE http://127.0.0.1:6900/api/tasks/abc12345
 ```
@@ -703,6 +716,7 @@ print(f"默认线程数：{config['default_threads']}")
 4. **缓存清理**：
    - 下载完成后，默认会清理分片文件，保留元数据和 m3u8 文件
    - 设置 `keep_cache: true` 可以保留所有文件
+   - 删除缓存时，如果缓存正在被任务引用，会拒绝删除（返回 409 Conflict）
 
 5. **日志文件**：
    - 默认日志目录：`logs/`
@@ -717,3 +731,11 @@ print(f"默认线程数：{config['default_threads']}")
    - `completed`: 已完成
    - `failed`: 失败
    - `cancelled`: 已取消
+
+7. **任务删除**：
+   - 删除正在运行的任务时，会先取消任务再删除
+   - 删除已结束的任务（completed/failed/cancelled）时，直接删除
+
+8. **缓存保护机制**：
+   - `/api/cache/clear` 会跳过正在被任务引用的缓存
+   - `/api/cache/<id>` DELETE 会拒绝删除正在被任务引用的缓存

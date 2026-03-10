@@ -93,51 +93,42 @@ docker run -d \
 | `/output` | `./output` | 下载完成的视频文件 |
 | `/data` | `./data` | 日志 (`/data/logs`) 和临时分片 (`/data/temp_segments`) |
 
-## API 端点
+## API 简介
 
-### 下载任务
+提交异步下载任务，立即返回 `task_id`，后台异步执行。
 
+**请求**
 ```bash
 # 提交下载任务
 curl -X POST http://localhost:6900/api/download \
   -H "Content-Type: application/json" \
-  -d '{"url": "https://example.com/video.m3u8", "threads": 8}'
-
-# 返回：{"success": true, "task_id": "abc12345", "status": "pending"}
+  -d '{
+    "url": "https://example.com/video.m3u8",
+    "threads": 8,
+    "output": "my_video.mp4"
+  }'
 ```
 
-### 任务管理
-
-```bash
-# 查询任务进度
-curl http://localhost:6900/api/tasks/abc12345
-
-# 列出所有任务
-curl http://localhost:6900/api/tasks
-
-# 取消任务
-curl -X DELETE http://localhost:6900/api/tasks/abc12345
+**成功响应**
+```json
+{
+    "success": true,
+    "task_id": "abc12345",
+    "status": "pending",
+    "message": "任务已提交，后台执行中"
+}
 ```
 
-### 缓存管理
+**说明**
+- 该接口是异步接口，提交任务后立即返回 `task_id`
+- 使用返回的 `task_id` 可通过 `/api/tasks/<task_id>` 查询进度
+- `task_id` 是 URL 的 MD5 哈希值（前 16 位字符）
 
-```bash
-# 列出所有缓存
-curl http://localhost:6900/api/cache/list
-
-# 清空所有缓存
-curl -X POST http://localhost:6900/api/cache/clear
-```
-
-### 健康检查
-
-```bash
-curl http://localhost:6900/health
-```
+其余完整的 API 文档请查看项目中的 [API.md](https://github.com/ZZH-Finalize/m3u8-downloader/blob/main/API.md) 文件。
 
 ## 使用示例
 
-### 1. 下载视频并跟踪进度
+### 下载视频并跟踪进度
 
 ```bash
 # 提交任务并获取 task_id
@@ -155,32 +146,26 @@ while true; do
 done
 ```
 
-### 2. 使用 Edge 插件
+### 使用 Edge 插件
 
-本项目提供 Edge 浏览器插件前端，详细说明请查看 [GitHub 仓库](https://github.com/ZZH-Finalize/m3u8-downloader)。
+本项目提供 Edge 浏览器插件前端
 
-## 健康检查
+![plugin](https://raw.githubusercontent.com/ZZH-Finalize/m3u8-downloader/refs/heads/master/imgs/main-page.png)
 
-```bash
-# 使用 curl 检查
-curl http://localhost:6900/health
-
-# 或查看容器健康状态
-docker inspect --format='{{.State.Health.Status}}' m3u8-downloader
-```
+打包好的插件可以在[https://github.com/ZZH-Finalize/m3u8-downloader/releases](https://github.com/ZZH-Finalize/m3u8-downloader/releases)下载到。
 
 ## 注意事项
 
 1. Docker 镜像已内置 ffmpeg，无需额外安装
 2. 后端服务需要保持运行才能使用 Edge 插件
 3. 默认情况下，下载完成后会清理分片文件，保留元数据
-4. 建议定期清理缓存：`curl -X POST http://localhost:6900/api/cache/clear`
+4. 完整的 API 文档请查看 [API.md](https://github.com/ZZH-Finalize/m3u8-downloader/blob/main/API.md)
 
 ## 相关资源
 
 - **GitHub 仓库**: https://github.com/ZZH-Finalize/m3u8-downloader
 - **Docker Hub**: https://hub.docker.com/r/zzhfinalize/m3u8-download-server
-- **完整 API 文档**: 查看项目中的 `API.md` 文件
+- **完整 API 文档**: https://github.com/ZZH-Finalize/m3u8-downloader/blob/main/API.md
 
 ## 许可证
 
