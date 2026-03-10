@@ -93,6 +93,14 @@ docker run -d \
 | `/output` | `./output` | 下载完成的视频文件 |
 | `/data` | `./data` | 日志 (`/data/logs`) 和临时分片 (`/data/temp_segments`) |
 
+### 使用 Edge 插件
+
+本项目提供 Edge 浏览器插件前端
+
+![plugin](https://raw.githubusercontent.com/ZZH-Finalize/m3u8-downloader/refs/heads/master/imgs/main-page.png)
+
+打包好的插件可以在[https://github.com/ZZH-Finalize/m3u8-downloader/releases](https://github.com/ZZH-Finalize/m3u8-downloader/releases)下载到。
+
 ## API 简介
 
 提交异步下载任务，立即返回 `task_id`，后台异步执行。
@@ -124,7 +132,7 @@ curl -X POST http://localhost:6900/api/download \
 - 使用返回的 `task_id` 可通过 `/api/tasks/<task_id>` 查询进度
 - `task_id` 是 URL 的 MD5 哈希值（前 16 位字符）
 
-其余完整的 API 文档请查看项目中的 [API.md](https://github.com/ZZH-Finalize/m3u8-downloader/blob/main/API.md) 文件。
+其余完整的 API 文档请查看项目中的 [API.md](https://github.com/ZZH-Finalize/m3u8-downloader/blob/master/API.md) 文件。
 
 ## 使用示例
 
@@ -146,26 +154,18 @@ while true; do
 done
 ```
 
-### 使用 Edge 插件
-
-本项目提供 Edge 浏览器插件前端
-
-![plugin](https://raw.githubusercontent.com/ZZH-Finalize/m3u8-downloader/refs/heads/master/imgs/main-page.png)
-
-打包好的插件可以在[https://github.com/ZZH-Finalize/m3u8-downloader/releases](https://github.com/ZZH-Finalize/m3u8-downloader/releases)下载到。
-
 ## 注意事项
 
 1. Docker 镜像已内置 ffmpeg，无需额外安装
 2. 后端服务需要保持运行才能使用 Edge 插件
 3. 默认情况下，下载完成后会清理分片文件，保留元数据
-4. 完整的 API 文档请查看 [API.md](https://github.com/ZZH-Finalize/m3u8-downloader/blob/main/API.md)
+4. 完整的 API 文档请查看 [API.md](https://github.com/ZZH-Finalize/m3u8-downloader/blob/master/API.md)
 
 ## 相关资源
 
 - **GitHub 仓库**: https://github.com/ZZH-Finalize/m3u8-downloader
 - **Docker Hub**: https://hub.docker.com/r/zzhfinalize/m3u8-download-server
-- **完整 API 文档**: https://github.com/ZZH-Finalize/m3u8-downloader/blob/main/API.md
+- **完整 API 文档**: https://github.com/ZZH-Finalize/m3u8-downloader/blob/master/API.md
 
 ## 许可证
 
