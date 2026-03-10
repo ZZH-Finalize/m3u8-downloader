@@ -17,6 +17,9 @@ let selectedCacheId = null;
 let currentCaches = [];
 let activeTaskCacheIds = new Set();  // 正在执行任务的 cache ID 集合
 
+// 任务详情状态
+let selectedTaskIdForDetail = null;  // 当前打开详情的任务 ID
+
 // DOM 元素
 const elements = {
   taskList: document.getElementById('task-list'),
@@ -26,6 +29,7 @@ const elements = {
   settingsModal: document.getElementById('settings-modal'),
   cacheModal: document.getElementById('cache-modal'),
   cacheDetailModal: document.getElementById('cache-detail-modal'),
+  taskDetailModal: document.getElementById('task-detail-modal'),
   addTaskForm: document.getElementById('add-task-form'),
   settingsForm: document.getElementById('settings-form'),
   serverStatus: document.getElementById('server-status'),
@@ -38,7 +42,8 @@ const elements = {
   cacheList: document.getElementById('cache-list'),
   cacheEmptyState: document.getElementById('cache-empty-state'),
   cacheLoadingState: document.getElementById('cache-loading-state'),
-  cacheDetailContent: document.getElementById('cache-detail-content')
+  cacheDetailContent: document.getElementById('cache-detail-content'),
+  taskDetailContent: document.getElementById('task-detail-content')
 };
 
 // 初始化
@@ -135,6 +140,11 @@ function setupEventListeners() {
   document.getElementById('close-cache-detail-modal').addEventListener('click', hideCacheDetailModal);
   document.getElementById('close-cache').addEventListener('click', hideCacheModal);
   document.getElementById('close-cache-detail').addEventListener('click', hideCacheDetailModal);
+  document.getElementById('close-task-detail-modal').addEventListener('click', hideTaskDetailModal);
+  document.getElementById('close-task-detail').addEventListener('click', hideTaskDetailModal);
+
+  // 任务详情操作按钮
+  document.getElementById('btn-cancel-task').addEventListener('click', handleCancelTaskFromDetail);
 
   // 缓存管理按钮
   document.getElementById('btn-refresh-cache').addEventListener('click', loadCacheList);
@@ -158,6 +168,9 @@ function setupEventListeners() {
   });
   elements.cacheDetailModal.addEventListener('click', (e) => {
     if (e.target === elements.cacheDetailModal) hideCacheDetailModal();
+  });
+  elements.taskDetailModal.addEventListener('click', (e) => {
+    if (e.target === elements.taskDetailModal) hideTaskDetailModal();
   });
 
   // 设置页面输入变化
@@ -490,6 +503,11 @@ function createTaskElement(task) {
     // 选中当前任务
     div.classList.add('selected');
     selectedTaskId = task.task_id;
+  });
+
+  // 双击打开任务详情
+  div.addEventListener('dblclick', () => {
+    showTaskDetail(task.task_id);
   });
 
   // 为重试按钮添加事件监听器
@@ -1283,4 +1301,207 @@ function renderCacheErrorState(errorMsg) {
   elements.cacheLoadingState.style.display = 'none';
   elements.cacheList.innerHTML = `<div class="empty-state"><p style="color: #dc3545;">加载失败：${escapeHtml(errorMsg)}</p></div>`;
   elements.cacheList.style.display = 'block';
+}
+
+// ==================== 任务详情功能 ====================
+
+// 显示任务详情
+async function showTaskDetail(taskId) {
+  if (!isServerOnline) {
+    showToast('服务器离线，无法获取任务详情', 'error');
+    return;
+  }
+
+  selectedTaskIdForDetail = taskId;
+
+  try {
+    const response = await fetch(`${getApiBaseUrl()}/api/tasks/${taskId}`);
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+
+    const result = await response.json();
+
+    if (!result.success) {
+      showToast(`获取任务详情失败：${result.error || '未知错误'}`, 'error');
+      return;
+    }
+
+    renderTaskDetail(result);
+    elements.taskDetailModal.style.display = 'flex';
+  } catch (error) {
+    console.error('获取任务详情失败:', error);
+    showToast('获取任务详情失败', 'error');
+  }
+}
+
+// 隐藏任务详情模态框
+function hideTaskDetailModal() {
+  elements.taskDetailModal.style.display = 'none';
+  selectedTaskIdForDetail = null;
+}
+
+// 渲染任务详情内容
+function renderTaskDetail(taskData) {
+  const { task_id, url, output_name, progress } = taskData;
+
+  const status = progress?.status || 'unknown';
+  const progressPercent = progress?.progress_percent || 0;
+  const segmentsDownloaded = progress?.segments_downloaded || 0;
+  const totalSegments = progress?.total_segments || 0;
+  const error = progress?.error;
+  const result = progress?.result;
+  const createdAt = progress?.created_at;
+  const startedAt = progress?.started_at;
+  const completedAt = progress?.completed_at;
+
+  const statusClassMap = {
+    pending: 'status-pending',
+    parsing: 'status-parsing',
+    downloading: 'status-downloading',
+    merging: 'status-merging',
+    completed: 'status-completed',
+    failed: 'status-failed',
+    cancelled: 'status-cancelled'
+  };
+
+  const statusTextMap = {
+    pending: '等待中',
+    parsing: '解析中',
+    downloading: '下载中',
+    merging: '合并中',
+    completed: '已完成',
+    failed: '失败',
+    cancelled: '已取消'
+  };
+
+  const statusClass = statusClassMap[status] || 'status-unknown';
+  const statusText = statusTextMap[status] || status;
+
+  let html = `
+    <div class="task-detail-section">
+      <h4 class="task-detail-section-title">基本信息</h4>
+      <div class="task-detail-row">
+        <span class="task-detail-label">任务 ID</span>
+        <span class="task-detail-value mono">${escapeHtml(task_id)}</span>
+      </div>
+      <div class="task-detail-row">
+        <span class="task-detail-label">状态</span>
+        <span class="task-detail-value status-badge ${statusClass}">${statusText}</span>
+      </div>
+      <div class="task-detail-row">
+        <span class="task-detail-label">输出文件名</span>
+        <span class="task-detail-value">${escapeHtml(output_name || 'N/A')}</span>
+      </div>
+      <div class="task-detail-row">
+        <span class="task-detail-label">m3u8 URL</span>
+        <span class="task-detail-value url">${escapeHtml(url)}</span>
+      </div>
+    </div>
+
+    <div class="task-detail-section">
+      <h4 class="task-detail-section-title">下载进度</h4>
+      <div class="task-detail-row">
+        <span class="task-detail-label">当前步骤</span>
+        <span class="task-detail-value">${escapeHtml(progress?.current_step || '-')}</span>
+      </div>
+      <div class="task-detail-row">
+        <span class="task-detail-label">进度</span>
+        <div class="task-detail-progress">
+          <div class="progress-bar-container" style="flex: 1; margin-right: 10px;">
+            <div class="progress-bar" style="width: ${progressPercent}%"></div>
+          </div>
+          <span class="task-detail-value">${progressPercent.toFixed(1)}%</span>
+        </div>
+      </div>
+      <div class="task-detail-row">
+        <span class="task-detail-label">分片下载</span>
+        <span class="task-detail-value">${segmentsDownloaded} / ${totalSegments}</span>
+      </div>
+    </div>
+
+    <div class="task-detail-section">
+      <h4 class="task-detail-section-title">时间信息</h4>
+      <div class="task-detail-row">
+        <span class="task-detail-label">创建时间</span>
+        <span class="task-detail-value">${formatDateTime(createdAt)}</span>
+      </div>
+      <div class="task-detail-row">
+        <span class="task-detail-label">开始时间</span>
+        <span class="task-detail-value">${formatDateTime(startedAt)}</span>
+      </div>
+      <div class="task-detail-row">
+        <span class="task-detail-label">完成时间</span>
+        <span class="task-detail-value">${formatDateTime(completedAt)}</span>
+      </div>
+    </div>
+  `;
+
+  // 错误信息（如果有）
+  if (error) {
+    html += `
+      <div class="task-detail-section">
+        <h4 class="task-detail-section-title text-danger">错误信息</h4>
+        <div class="task-detail-row">
+          <span class="task-detail-value text-danger">${escapeHtml(error)}</span>
+        </div>
+      </div>
+    `;
+  }
+
+  // 最终结果（如果有）
+  if (result) {
+    html += `
+      <div class="task-detail-section">
+        <h4 class="task-detail-section-title text-success">下载结果</h4>
+        <div class="task-detail-row">
+          <span class="task-detail-value text-success">${JSON.stringify(result, null, 2)}</span>
+        </div>
+      </div>
+    `;
+  }
+
+  elements.taskDetailContent.innerHTML = html;
+}
+
+// 从任务详情中取消任务
+async function handleCancelTaskFromDetail() {
+  if (!selectedTaskIdForDetail) {
+    showToast('没有可取消的任务', 'error');
+    return;
+  }
+
+  if (!confirm(`确定要取消任务 ${selectedTaskIdForDetail} 吗？`)) {
+    return;
+  }
+
+  try {
+    const response = await fetch(`${getApiBaseUrl()}/api/tasks/${selectedTaskIdForDetail}`, {
+      method: 'DELETE'
+    });
+
+    const result = await response.json();
+
+    if (result.success) {
+      showToast('任务已取消', 'success');
+      hideTaskDetailModal();
+      await loadTaskList();
+    } else {
+      showToast(`取消失败：${result.error || '未知错误'}`, 'error');
+    }
+  } catch (error) {
+    showToast(`请求失败：${error.message}`, 'error');
+  }
+}
+
+// 格式化日期时间（包含日期）
+function formatDateTime(isoString) {
+  if (!isoString) return '-';
+  try {
+    const date = new Date(isoString);
+    return date.toLocaleString('zh-CN');
+  } catch {
+    return isoString;
+  }
 }

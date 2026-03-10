@@ -185,6 +185,25 @@
     </div>
   </div>
 
+  <!-- 任务详情对话框 -->
+  <div id="task-detail-modal" class="modal" style="display: none;">
+    <div class="modal-content modal-content-lg">
+      <div class="modal-header">
+        <h3>任务详情</h3>
+        <button class="modal-close" id="close-task-detail-modal">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div id="task-detail-content" class="task-detail-content">
+          <!-- 详情内容将通过 JS 动态插入 -->
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" id="close-task-detail" class="btn btn-secondary">关闭</button>
+        <button type="button" id="btn-cancel-task" class="btn btn-danger">取消任务</button>
+      </div>
+    </div>
+  </div>
+
   <script src="popup.js"></script>
 </body>
 </html>
