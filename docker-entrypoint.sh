@@ -14,9 +14,9 @@ if [ -n "$SERVER_PORT" ]; then
     ARGS="$ARGS --port $SERVER_PORT"
 fi
 
-# 默认下载并发数
-if [ -n "$DEFAULT_THREADS" ]; then
-    ARGS="$ARGS --default-threads $DEFAULT_THREADS"
+# 下载并发数上限
+if [ -n "$MAX_THREADS" ]; then
+    ARGS="$ARGS --max-threads $MAX_THREADS"
 fi
 
 # 日志级别

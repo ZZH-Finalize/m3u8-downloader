@@ -21,7 +21,7 @@ python backend/server.py [选项]
 |------|--------|------|
 | `--host` | `127.0.0.1` | 监听地址 IP |
 | `--port` | `6900` | 监听端口 |
-| `--default-threads` | `8` | 默认下载并发数 |
+| `--max-threads` | `32` | 下载并发数上限。如果 API 请求传入的 threads 值大于此值，将使用此值。 |
 | `--log-level` | `INFO` | 日志级别 (DEBUG/INFO/WARNING/ERROR/CRITICAL) |
 | `--log-dir` | `logs` | 日志目录 |
 | `--debug` | - | 启用调试模式（等同于 --log-level DEBUG） |
@@ -102,7 +102,7 @@ GET /api/config
 **响应**
 ```json
 {
-    "default_threads": 8,
+    "max_threads": 32,
     "log_level": "INFO",
     "log_dir": "logs"
 }
@@ -111,7 +111,7 @@ GET /api/config
 **字段说明**
 | 字段 | 类型 | 说明 |
 |------|------|------|
-| `default_threads` | int | 默认下载并发数 |
+| `max_threads` | int | 下载并发数上限 |
 | `log_level` | string | 当前日志级别 |
 | `log_dir` | string | 日志目录路径 |
 
@@ -143,7 +143,7 @@ Content-Type: application/json
 | 字段 | 类型 | 必填 | 默认值 | 说明 |
 |------|------|------|--------|------|
 | `url` | string | 是 | - | m3u8 文件的 URL |
-| `threads` | int | 否 | `default_threads` | 下载并发数 |
+| `threads` | int | 否 | `max-threads` | 下载并发数（如果大于 `max-threads`，则使用 `max-threads`） |
 | `output` | string | 否 | `"video.mp4"` | 输出文件名 |
 | `max_rounds` | int | 否 | `5` | 最大下载轮次（重试次数） |
 | `keep_cache` | boolean | 否 | `false` | 是否保留缓存文件 |
@@ -693,7 +693,7 @@ print(response.json())
 # 获取服务器配置
 response = requests.get(f"{API_BASE}/api/config")
 config = response.json()
-print(f"默认线程数：{config['default_threads']}")
+print(f"最大并发数：{config['max_threads']}")
 ```
 
 ---
@@ -710,8 +710,8 @@ print(f"默认线程数：{config['default_threads']}")
 2. **缓存 ID 生成规则**：缓存 ID 是 m3u8 URL 的 MD5 哈希值的前 16 位字符（与 task_id 一致）。
 
 3. **线程数配置**：
-   - 如果请求中未指定 `threads`，使用服务器启动时的 `--default-threads` 配置
-   - 如果请求中指定了 `threads`，使用请求中的值
+   - 如果请求中未指定 `threads`，使用服务器启动时的 `--max-threads` 配置
+   - 如果请求中指定了 `threads`，使用请求中的值，但不会超过 `--max-threads` 的上限
 
 4. **缓存清理**：
    - 下载完成后，默认会清理分片文件，保留元数据和 m3u8 文件

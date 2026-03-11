@@ -51,7 +51,7 @@ python backend/server.py
 可选参数：
 - `--host`: 监听地址 IP (默认：127.0.0.1)
 - `--port`: 监听端口 (默认：6900)
-- `--default-threads`: 默认下载并发数 (默认：8)
+- `--max-threads`: 下载并发数上限 (默认：32)。如果 API 请求传入的 threads 值大于此值，将使用此值。
 - `--log-level`: 日志级别 DEBUG|INFO|WARNING|ERROR|CRITICAL (默认：INFO)
 - `--log-dir`: 日志目录 (默认：logs)
 - `--debug`: 启用调试模式（等同于 --log-level DEBUG）
@@ -63,8 +63,8 @@ python backend/server.py
 # 监听所有地址，端口 8080
 python backend/server.py --host 0.0.0.0 --port 8080
 
-# 设置默认 16 并发，DEBUG 日志
-python backend/server.py --default-threads 16 --log-level DEBUG
+# 设置最大 16 并发，DEBUG 日志
+python backend/server.py --max-threads 16 --log-level DEBUG
 ```
 
 ### 3. 使用 Edge 插件下载视频
@@ -94,7 +94,7 @@ Content-Type: application/json
 | 字段 | 类型 | 必填 | 默认值 | 说明 |
 |------|------|------|--------|------|
 | `url` | string | 是 | - | m3u8 文件的 URL |
-| `threads` | int | 否 | `default_threads` | 下载并发数 |
+| `threads` | int | 否 | `max-threads` | 下载并发数（如果大于 `max-threads`，则使用 `max-threads`） |
 | `output` | string | 否 | `"video.mp4"` | 输出文件名 |
 | `max_rounds` | int | 否 | `5` | 最大下载轮次（重试次数） |
 | `keep_cache` | boolean | 否 | `false` | 是否保留缓存文件 |
@@ -177,7 +177,7 @@ services:
       # 服务器配置
       - SERVER_HOST=0.0.0.0
       - SERVER_PORT=6900
-      - DEFAULT_THREADS=8
+      - MAX_THREADS=32
       # 日志配置
       - LOG_LEVEL=INFO
       - DEBUG=false
@@ -214,7 +214,7 @@ Docker 容器支持以下环境变量：
 |--------|--------|------|
 | `SERVER_HOST` | `0.0.0.0` | 监听地址 IP |
 | `SERVER_PORT` | `6900` | 监听端口 |
-| `DEFAULT_THREADS` | `8` | 默认下载并发数 |
+| `MAX_THREADS` | `32` | 下载并发数上限 |
 | `LOG_LEVEL` | `INFO` | 日志级别 (DEBUG/INFO/WARNING/ERROR/CRITICAL) |
 | `LOG_DIR` | `/data/logs` | 日志目录 |
 | `DEBUG` | `false` | 启用调试模式 |
@@ -247,7 +247,7 @@ python backend/server.py
 可选参数：
 - `--host`: 监听地址 IP (默认：127.0.0.1)
 - `--port`: 监听端口 (默认：6900)
-- `--default-threads`: 默认下载并发数 (默认：8)
+- `--max-threads`: 下载并发数上限 (默认：32)。如果 API 请求传入的 threads 值大于此值，将使用此值。
 - `--log-level`: 日志级别 DEBUG|INFO|WARNING|ERROR|CRITICAL (默认：INFO)
 - `--log-dir`: 日志目录 (默认：logs)
 - `--debug`: 启用调试模式（等同于 --log-level DEBUG）
@@ -259,8 +259,8 @@ python backend/server.py
 # 监听所有地址，端口 8080
 python backend/server.py --host 0.0.0.0 --port 8080
 
-# 设置默认 16 并发，DEBUG 日志
-python backend/server.py --default-threads 16 --log-level DEBUG
+# 设置最大 16 并发，DEBUG 日志
+python backend/server.py --max-threads 16 --log-level DEBUG
 ```
 
 ### 健康检查

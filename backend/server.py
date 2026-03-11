@@ -31,7 +31,7 @@ from logger import get_logger, LOG_FILE, setup_logger
 
 # 全局配置（通过命令行参数设置）
 server_config = {
-    "default_threads": 8,
+    "max_threads": 32,
     "temp_dir": "data/temp_segments",
     "output_dir": "output",
 }
@@ -63,7 +63,7 @@ async def health_check():
 async def get_server_config():
     """获取服务器配置信息"""
     return jsonify({
-        "default_threads": server_config.get("default_threads", 8),
+        "max_threads": server_config.get("max_threads", 32),
         "log_level": logging.getLevelName(logger.level),
         "log_dir": str(LOG_FILE.parent)
     })
@@ -80,9 +80,13 @@ def _validate_download_request(data: dict) -> tuple[bool, Optional[dict]]:
 
 def _create_task_from_request(data: dict) -> tuple:
     """从请求数据创建任务"""
+    # 计算实际使用的线程数：取请求值和 max_threads 的较小值
+    requested_threads = data.get('threads') if data.get('threads') is not None else server_config.get("max_threads", 32)
+    actual_threads = min(requested_threads, server_config.get("max_threads", 32))
+    
     return task_manager.create_task(
         url=data['url'],
-        threads=data.get('threads') if data.get('threads') is not None else server_config.get("default_threads", 8),
+        threads=actual_threads,
         output_dir=server_config.get("output_dir", DEFAULT_OUTPUT_DIR),
         temp_dir=server_config.get("temp_dir", DEFAULT_TEMP_DIR),
         max_rounds=data.get('max_rounds', 5),
@@ -401,7 +405,7 @@ def parse_args():
         epilog="""
 示例:
   %(prog)s --host 0.0.0.0 --port 8080
-  %(prog)s --default-threads 16 --log-level DEBUG
+  %(prog)s --max-threads 16 --log-level DEBUG
   %(prog)s --log-dir /var/log/m3u8-downloader
 
 API 端点:
@@ -424,11 +428,11 @@ API 端点:
         help="监听端口 (默认：6900)"
     )
     parser.add_argument(
-        "--default-threads",
+        "--max-threads",
         type=int,
-        default=8,
+        default=32,
         metavar="N",
-        help="默认下载并发数 (默认：8)"
+        help="下载并发数上限 (默认：32)。如果 API 请求传入的 threads 值大于此值，将使用此值。"
     )
     parser.add_argument(
         "--log-level",
@@ -473,7 +477,7 @@ def main():
     args = parse_args()
 
     # 更新全局配置
-    server_config["default_threads"] = args.default_threads
+    server_config["max_threads"] = args.max_threads
     server_config["temp_dir"] = args.temp_dir
     server_config["output_dir"] = args.output_dir
 
@@ -503,7 +507,7 @@ def main():
 
     logger.info(f"启动 m3u8 下载服务 API (异步版本)")
     logger.info(f"监听地址：{args.host}:{args.port}")
-    logger.info(f"默认并发数：{server_config['default_threads']}")
+    logger.info(f"最大并发数：{server_config['max_threads']}")
     logger.info(f"日志级别：{logging.getLevelName(log_level)}")
     logger.info(f"日志目录：{log_dir}")
 

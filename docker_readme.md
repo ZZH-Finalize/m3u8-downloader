@@ -33,7 +33,7 @@ services:
     environment:
       - SERVER_HOST=0.0.0.0
       - SERVER_PORT=6900
-      - DEFAULT_THREADS=8
+      - MAX_THREADS=32
       - LOG_LEVEL=INFO
       - DEBUG=false
     restart: unless-stopped
@@ -67,7 +67,7 @@ docker run -d \
   -v $(pwd)/output:/output \
   -v $(pwd)/data:/data \
   -e SERVER_HOST=0.0.0.0 \
-  -e DEFAULT_THREADS=8 \
+  -e MAX_THREADS=32 \
   -e LOG_LEVEL=INFO \
   --restart unless-stopped \
   zzhfinalize/m3u8-download-server:latest
@@ -79,7 +79,7 @@ docker run -d \
 |--------|--------|------|
 | `SERVER_HOST` | `0.0.0.0` | 监听地址 IP |
 | `SERVER_PORT` | `6900` | 监听端口 |
-| `DEFAULT_THREADS` | `8` | 默认下载并发数 |
+| `MAX_THREADS` | `32` | 下载并发数上限。如果 API 请求传入的 threads 值大于此值，将使用此值。 |
 | `LOG_LEVEL` | `INFO` | 日志级别 (DEBUG/INFO/WARNING/ERROR/CRITICAL) |
 | `LOG_DIR` | `/data/logs` | 日志目录 |
 | `DEBUG` | `false` | 启用调试模式 |
