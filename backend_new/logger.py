@@ -13,12 +13,9 @@ from typing import Optional
 
 from config import ServerConfig
 
-# 存储已创建的 logger，避免重复创建
-_loggers: dict[str, logging.Logger] = {}
-
 # 默认配置
 LOG_FORMAT = "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
-CONSOLE_FORMAT = "[%(levelname)s] %(message)s"
+CONSOLE_FORMAT = "[%(name)s][%(levelname)s]: %(message)s"
 DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
 
 
@@ -32,9 +29,6 @@ def setup_logger(config: ServerConfig) -> logging.Logger:
     Returns:
         配置好的 Logger 实例
     """
-    cache_key = f"m3u8-downloader_{config.log_level}"
-    if cache_key in _loggers:
-        return _loggers[cache_key]
 
     log_dir = config.log_dir
     log_file = log_dir / "m3u8-downloader.log"
@@ -45,6 +39,7 @@ def setup_logger(config: ServerConfig) -> logging.Logger:
         return logger
 
     logger.setLevel(log_level)
+    logger.propagate = False
 
     # 创建日志目录
     log_dir.mkdir(parents=True, exist_ok=True)
@@ -70,7 +65,6 @@ def setup_logger(config: ServerConfig) -> logging.Logger:
     logger.addHandler(file_handler)
     logger.addHandler(console_handler)
 
-    _loggers[cache_key] = logger
     return logger
 
 
