@@ -3,124 +3,60 @@
 支持多分辨率 m3u8 解析
 """
 
-import asyncio
+import os
 import aiohttp
-from aiohttp import ClientError
-from typing import Optional
-
+import aiofiles
 import m3u8
 
 from task import DownloadTask
+from models import TaskStatus
 from logger import get_logger
+from config import server_config as config
+from urllib.parse import urlparse, unquote
 
 logger = get_logger('parser')
 
-
-async def parse_m3u8(task: DownloadTask, timeout: int = 30) -> bool:
-    """
-    解析 m3u8 文件，支持多分辨率
-
-    Args:
-        task: 下载任务对象
-        timeout: 请求超时时间
-
-    Returns:
-        解析是否成功
-    """
-    url = task.url
-    logger.info(f"正在解析：{url}")
-
+async def fetch_m3u8(task_id: str, url: str) -> m3u8.M3U8:
     try:
-        async with aiohttp.ClientSession(
-            timeout=aiohttp.ClientTimeout(total=timeout),
-            headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
-        ) as session:
-            content = await _fetch_url(session, url)
-            if not content:
-                logger.error(f"无法获取 m3u8 文件：{url}")
-                return False
+        logger.info(f'获取m3u8文件: {url}')
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url) as response:
+                m3u8_content = await response.text()
 
-            metadata = task.metadata
-            base_url = metadata.get_base_url()
-            playlist = m3u8.loads(content)
-            playlist.base_uri = url
+        filename = os.path.basename(unquote(urlparse(url).path))
 
-            # 检查是否是 Master Playlist（多分辨率）
-            if playlist.playlists:
-                logger.info(f"检测到 Master Playlist，包含 {len(playlist.playlists)} 个子列表")
-                # 列出所有分辨率
-                for p in playlist.playlists:
-                    resolution = p.stream_info.resolution
-                    bandwidth = p.stream_info.bandwidth
-                    logger.info(f"  - 分辨率：{resolution}, 码率：{bandwidth}")
+        async with aiofiles.open(config.temp_dir / task_id / filename, 'w') as f:
+            await f.write(m3u8_content)
 
-                # 选择最高分辨率的子 playlist
-                best_playlist = max(
-                    playlist.playlists,
-                    key=lambda p: p.stream_info.resolution or (0, 0)
-                )
-                best_resolution = best_playlist.stream_info.resolution
-                logger.info(f"选择最高分辨率：{best_resolution}")
-
-                # 获取子 playlist 内容
-                sub_content = await _fetch_url(session, best_playlist.absolute_uri)
-                if not sub_content:
-                    logger.error(f"无法获取子 m3u8 文件：{best_playlist.absolute_uri}")
-                    return False
-
-                sub_playlist = m3u8.loads(sub_content)
-                sub_playlist.base_uri = best_playlist.absolute_uri
-                base_url = metadata.get_base_url()
-                segment_urls = _extract_segments(metadata, sub_playlist, base_url)
-            else:
-                # 普通 playlist，直接提取分片
-                segment_urls = _extract_segments(metadata, playlist, base_url)
-
-            if not segment_urls:
-                logger.error("未找到任何视频分片")
-                return False
-
-            logger.info(f"解析成功，共找到 {len(segment_urls)} 个分片")
-
-            # 更新元数据
-            metadata.slice_files = segment_urls
-            metadata.totol_slice = len(segment_urls)
-
-            return True
+        return m3u8.loads(m3u8_content, uri=url)
 
     except Exception as e:
-        logger.error(f"解析失败：{e}")
-        return False
+        logger.error(f'获取m3u8文件失败: {e.with_traceback(e.__traceback__)}')
+        raise
 
+async def parse_m3u8(task: DownloadTask):
+    task.state = TaskStatus.PARSING
+    m3u8_obj = await fetch_m3u8(task.id, task.url)
 
-async def _fetch_url(session: aiohttp.ClientSession, url: str) -> Optional[str]:
-    """异步获取 URL 内容"""
-    try:
-        async with session.get(url) as response:
-            response.raise_for_status()
-            return await response.text()
-    except ClientError as e:
-        logger.error(f"无法获取 URL {url} - {e}")
-        return None
+    # already is filelist
+    if False == m3u8_obj.is_variant:
+        selected_m3u8 = m3u8_obj
+    else:
+        logger.info(f'[{task.id}] 检测到多分辨率媒体')
 
+        # process playlists
+        playlists = m3u8_obj.playlists
+        # sort based on resolution
+        playlists.sort(key=lambda x: x.stream_info.resolution[1], reverse=True)
+        # first is the best resolution
+        best_resolution = playlists[0]
+        # fetch best m3u8
+        best_m3u8 = await fetch_m3u8(task.id, best_resolution.absolute_uri)
 
-def _extract_segments(
-    metadata,
-    playlist: m3u8.M3U8,
-    base_url: str
-) -> list[str]:
-    """从 m3u8 playlist 中提取分片 URL"""
-    segment_urls = []
-    query_params = metadata.extract_query_params()
+        logger.info(f'[{task.id}] 自动选择最优分辨率: {best_resolution.stream_info.resolution[0]}x{best_resolution.stream_info.resolution[1]}')
+        selected_m3u8 = best_m3u8
 
-    for segment in playlist.segments:
-        segment_url = segment.absolute_uri
+    task.base_url = selected_m3u8.base_uri
+    task.metadata.segments = selected_m3u8.files.copy()
 
-        if segment_url:
-            # 如果原始 URL 有查询参数，且分片 URL 是相对路径拼接的，需要附加查询参数
-            if query_params and metadata.is_relative_segment_url(segment_url, base_url):
-                segment_url = metadata.append_query_params(segment_url, query_params)
-
-            segment_urls.append(segment_url)
-
-    return segment_urls
+    await task.cache.flush()

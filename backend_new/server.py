@@ -12,14 +12,14 @@ m3u8 下载服务 - 异步后端 API 服务 (重写版)
 
 import sys
 import argparse
-import logging
+import logging, logger
 from pathlib import Path
-from models import ServerConfig, DownloadArgs, DownloadResponse
+from models import DownloadArgs, DownloadResponse
 
 from quart import Quart, request, jsonify
 from quart_cors import cors
 
-from config import server_config
+from config import ServerConfig, server_config
 
 # ===== Quart 应用初始化 =====
 app = cors(Quart(__name__))
@@ -185,11 +185,15 @@ def main():
     # 使用 model_validate 创建 server_config
     server_config = ServerConfig.model_validate(args_dict)
 
-    # 配置日志目录
-    log_dir = Path(args.log_dir)
-    log_dir.mkdir(parents=True, exist_ok=True)
+    # 创建日志目录
+    Path(server_config.log_dir).mkdir(parents=True, exist_ok=True)
+    # 创建临时目录
+    Path(server_config.temp_dir).mkdir(parents=True, exist_ok=True)
+    # 创建输出目录
+    Path(server_config.output_dir).mkdir(parents=True, exist_ok=True)
 
     # TODO: 初始化日志系统
+    logger.setup_logger(server_config)
 
     # 打印所有配置
     logging.info(f"启动 m3u8 下载服务")
@@ -204,11 +208,15 @@ def main():
     logging.info("======================")
 
     # 启动 Quart 应用
-    app.run(
-        host=args.host,
-        port=args.port,
-        debug=args.debug
-    )
+    # app.run(
+    #     host=args.host,
+    #     port=args.port,
+    #     debug=args.debug
+    # )
+    import asyncio
+    from steps import download
+
+    asyncio.run(download('https://asmr.121231234.xyz/asmr6/%E5%B0%8F%E7%8B%B8/31.m3u8?sign=Xaw-ie3jzZxpyBO9cUzBN0j57OUaGSZwjPMoIhIxoAA=:1851477223'))
 
 
 if __name__ == "__main__":

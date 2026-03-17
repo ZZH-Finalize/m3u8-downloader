@@ -11,7 +11,7 @@ from pathlib import Path
 from logging.handlers import RotatingFileHandler
 from typing import Optional
 
-from models import ServerConfig
+from config import ServerConfig
 
 # 存储已创建的 logger，避免重复创建
 _loggers: dict[str, logging.Logger] = {}
