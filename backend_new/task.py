@@ -24,13 +24,13 @@ class DownloadTask:
         self.complete = asyncio.Event()
 
         # 缓存路径
-        self.__cache_dir = config.temp_dir / self.cache.id
-        self.__segments_dir = self.__cache_dir / 'segments'
-        self.__metadata_file = self.__cache_dir / METADATA_FILE_NAME
+        self.cache_dir = config.temp_dir / self.cache.id
+        self.segments_dir = self.cache_dir / 'segments'
+        self.metadata_file = self.cache_dir / METADATA_FILE_NAME
 
         # 创建任务的cache路径
-        self.__cache_dir.mkdir(parents=True, exist_ok=True)
-        self.__segments_dir.mkdir(parents=True, exist_ok=True)
+        self.cache_dir.mkdir(parents=True, exist_ok=True)
+        self.segments_dir.mkdir(parents=True, exist_ok=True)
 
     @property
     def id(self):
@@ -53,11 +53,11 @@ class DownloadTask:
         self.cache.metadata.state = state
     
     def cache_exists(self):
-        return self.__metadata_file.exists()
+        return self.metadata_file.exists()
 
     async def load_cache(self):
         try:
-            async with aiofiles.open(self.__metadata_file, 'r') as f:
+            async with aiofiles.open(self.metadata_file, 'r') as f:
                 metadata = await f.read()
 
             self.cache.metadata = MetaData.model_validate_json(metadata)
@@ -67,7 +67,7 @@ class DownloadTask:
             raise
 
     async def cache_file(self, fn: Path | str, content, mode: str = 'w'):
-        async with aiofiles.open(self.__cache_dir / fn, mode) as f: # pyright: ignore[reportArgumentType, reportCallIssue]
+        async with aiofiles.open(self.cache_dir / fn, mode) as f: # pyright: ignore[reportArgumentType, reportCallIssue]
             await f.write(content)
 
     async def flush_cache(self):

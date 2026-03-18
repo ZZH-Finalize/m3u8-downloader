@@ -137,9 +137,9 @@ API 端点:
     parser.add_argument(
         "--log-level",
         type=str,
-        default=server_config.log_level,
+        default=logging._levelToName[server_config.log_level],
         choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
-        help=f"日志级别 (默认：{server_config.log_level})"
+        help=f"日志级别 (默认：{logging._levelToName[server_config.log_level]})"
     )
     parser.add_argument(
         "--log-dir",

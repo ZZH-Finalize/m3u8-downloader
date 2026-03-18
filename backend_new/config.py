@@ -12,7 +12,7 @@ class ServerConfig(BaseModel):
     log_dir: Path = Path("logs")
     debug: bool = False
     temp_dir: Path = Path("data/task_cahce")
-    output_dir: str = "output"
+    output_dir: Path = Path("output")
 
 # ===== 全局配置 =====
 server_config = ServerConfig()
