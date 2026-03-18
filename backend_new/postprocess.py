@@ -1,4 +1,4 @@
-import asyncio, os
+import asyncio, os, shutil
 import config
 
 from models import TaskStatus
@@ -7,6 +7,9 @@ from logger import get_logger
 from tempfile import NamedTemporaryFile
 
 logger = get_logger(__name__)
+
+def clear_segments(task: DownloadTask):
+    shutil.rmtree(task.segments_dir)
 
 async def merge_segments(task: DownloadTask):
     task.state = TaskStatus.MERGING
@@ -26,7 +29,7 @@ async def merge_segments(task: DownloadTask):
             '-i', f.name,
             '-c', 'copy',
             # '-bsf:a', 'aac_adtstoasc',
-            config.server_config.output_dir / task.metadata.output_name
+            config.server.output_dir / task.metadata.output_name
         ]
     try:
         process = await asyncio.create_subprocess_exec(

@@ -4,14 +4,13 @@
 """
 
 import os
-import aiohttp
-import aiofiles
+import aiohttp, aiofiles
 import m3u8
+import config
 
 from task import DownloadTask
 from models import TaskStatus
 from logger import get_logger
-from config import server_config as config
 from urllib.parse import urlparse, unquote
 from bitarray import bitarray
 
@@ -19,14 +18,14 @@ logger = get_logger(__name__)
 
 async def fetch_m3u8(task_id: str, url: str) -> m3u8.M3U8:
     try:
-        logger.info(f'获取m3u8文件: {url}')
+        logger.info(f'[{task_id}] 获取m3u8文件: {url}')
         async with aiohttp.ClientSession() as session:
             async with session.get(url) as response:
                 m3u8_content = await response.text()
 
         filename = os.path.basename(unquote(urlparse(url).path))
 
-        async with aiofiles.open(config.temp_dir / task_id / filename, 'w') as f:
+        async with aiofiles.open(config.server.temp_dir / task_id / filename, 'w') as f:
             await f.write(m3u8_content)
 
         return m3u8.loads(m3u8_content, uri=url)

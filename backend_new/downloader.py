@@ -4,7 +4,6 @@ import asyncio, aiohttp
 from models import TaskStatus, SegmentInfo
 from task import DownloadTask
 from logger import get_logger
-from config import server_config as config
 from urllib.parse import urlparse, unquote, urljoin
 
 logger = get_logger(__name__)

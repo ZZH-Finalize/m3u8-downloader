@@ -1,7 +1,7 @@
 import aiofiles, asyncio
+import config
 
 from models import MetaData, SegmentInfo, TaskStatus
-from config import server_config as config
 from logger import get_logger
 from pathlib import Path
 
@@ -17,6 +17,8 @@ class DownloadTask:
         self.metadata.output_name = output_name
         self.max_threads = max_threads
 
+        self.old_state = TaskStatus.PENDING
+
         # 待下载分片 queue
         self.url_queue: asyncio.Queue[SegmentInfo | None] = asyncio.Queue()
         # 暂停控制
@@ -25,8 +27,8 @@ class DownloadTask:
         self.complete = asyncio.Event()
 
         # 缓存路径
-        self.cache_dir = config.temp_dir / self.metadata.id
-        self.segments_dir = self.cache_dir / 'segments'
+        self.cache_dir = config.server.temp_dir / self.id
+        self.segments_dir = self.cache_dir / config.server.segments_dir
         self.metadata_file = self.cache_dir / METADATA_FILE_NAME
 
         # 创建任务的cache路径
@@ -44,6 +46,25 @@ class DownloadTask:
     @state.setter
     def state(self, state):
         self.metadata.state = state
+
+    def pause(self):
+        if self.state not in (TaskStatus.PENDING, TaskStatus.PARSING, TaskStatus.DOWNLOADING):
+            return
+
+        logger.info(f'[{self.id}] 暂停执行')
+
+        self.continue_evt.clear()
+        self.old_state = self.state
+        self.state = TaskStatus.PAUSED
+
+    def resume(self):
+        if self.state != TaskStatus.PAUSED:
+            return
+
+        logger.info(f'[{self.id}] 恢复执行')
+
+        self.continue_evt.set()
+        self.state = self.old_state
 
     def cache_exists(self):
         return self.metadata_file.exists()
@@ -67,19 +88,24 @@ class DownloadTask:
         await self.cache_file(METADATA_FILE_NAME, self.metadata.model_dump_json())
 
     async def save_segment(self, fn: str, id: int, content):
-        await self.cache_file(Path('segments') / fn, content, mode='wb')
+        await self.cache_file(config.server.segments_dir / fn, content, mode='wb')
         self.metadata.downloaded_mask[id] = 1
 
 from parser import parse_m3u8
 from downloader import download_segments
-from postprocess import merge_segments
+from postprocess import merge_segments, clear_segments
 from hashlib import md5 as hash_func
 
 task_map: dict[str, DownloadTask] = {}
 queue: asyncio.Queue[DownloadTask] = asyncio.Queue()
+current_queued_task: DownloadTask | None = None
 
-async def __exec(task: DownloadTask):
+async def __exec(task: DownloadTask, queued: bool = False):
     try:
+        if False == queued and current_queued_task is not None:
+            # 并发任务启动时, 暂停队列任务
+            current_queued_task.pause()
+
         if task.cache_exists():
             logger.info(f'[{task.id}] 元数据文件存在')
             await task.load_cache()
@@ -89,28 +115,41 @@ async def __exec(task: DownloadTask):
         await download_segments(task)
         await merge_segments(task)
 
+        clear_segments(task)
+
         task.state = TaskStatus.COMPLETED
         await task.flush_cache()
 
     except Exception as e:
         task.state = TaskStatus.FAILED
         logger.error(f'[{task.id}] 任务出现异常: {e}')
+    
+    finally:
+        if False == queued and current_queued_task is not None:
+            # 并发任务结束后, 恢复队列任务
+            current_queued_task.resume()
 
-async def scheduler():
+async def queued_task_executor():
+    global current_queued_task
+
     while True:
         task = await queue.get()
-        await __exec(task)
+        current_queued_task = task
+        await __exec(task, True)
+        current_queued_task = None
 
-async def add(url: str, max_threads: int = config.max_threads, output_name: str = 'video.mp4', add_to_queue: bool = False):
+async def add(url: str, max_threads: int = config.server.max_threads, output_name: str = 'video.mp4', queued: bool = False):
     task_id = hash_func(url.encode('utf-8')).hexdigest()[:16]
 
-    if task_id not in task_map:
-        task = DownloadTask(task_id, url, max_threads, output_name)
-    else:
-        task = task_map[task_id]
+    if task_id  in task_map:
+        return False
 
-    if add_to_queue:
+    task = DownloadTask(task_id, url, max_threads, output_name)
+
+    if queued:
         await queue.put(task)
     else:
         asyncio.create_task(__exec(task))
+
+    return True
 

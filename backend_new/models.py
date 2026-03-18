@@ -47,8 +47,8 @@ class MetaData(BaseModel):
     """缓存元数据"""
     model_config = {'arbitrary_types_allowed': True}
 
-    url: str
-    base_url: str
+    url: str = Field(frozen=True)
+    base_url: str = ''
 
     output_name: str = 'video.mp4'
     state: TaskStatus = TaskStatus.PENDING

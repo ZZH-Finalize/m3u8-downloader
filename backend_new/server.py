@@ -11,7 +11,7 @@ m3u8 下载服务 - 异步后端 API 服务 (重写版)
 """
 
 import sys
-import argparse
+import argparse, asyncio
 import logging, logger
 from pathlib import Path
 from models import DownloadArgs, DownloadResponse
@@ -20,7 +20,6 @@ from quart import Quart, request, jsonify
 from quart_cors import cors
 
 import config
-from config import server_config
 
 # ===== Quart 应用初始化 =====
 app = cors(Quart(__name__))
@@ -30,13 +29,13 @@ app = cors(Quart(__name__))
 @app.route('/health', methods=['GET'])
 async def health_check():
     """健康检查端点"""
-    return jsonify()
+    return jsonify({'status': 'ok'})
 
 
 @app.route('/api/config', methods=['GET'])
 async def get_server_config():
     """获取服务器配置信息"""
-    return jsonify(server_config)
+    return jsonify(config.server)
 
 
 @app.route('/api/download', methods=['POST'])
@@ -118,35 +117,35 @@ API 端点:
     parser.add_argument(
         "--host",
         type=str,
-        default=server_config.host,
-        help=f"监听地址 IP (默认：{server_config.host})"
+        default=config.server.host,
+        help=f"监听地址 IP (默认：{config.server.host})"
     )
     parser.add_argument(
         "--port",
         type=int,
-        default=server_config.port,
-        help=f"监听端口 (默认：{server_config.port})"
+        default=config.server.port,
+        help=f"监听端口 (默认：{config.server.port})"
     )
     parser.add_argument(
         "--max-threads",
         type=int,
-        default=server_config.max_threads,
+        default=config.server.max_threads,
         metavar="N",
-        help=f"下载并发数上限 (默认：{server_config.max_threads})。如果 API 请求传入的 threads 值大于此值，将使用此值。"
+        help=f"下载并发数上限 (默认：{config.server.max_threads})。如果 API 请求传入的 threads 值大于此值，将使用此值。"
     )
     parser.add_argument(
         "--log-level",
         type=str,
-        default=logging._levelToName[server_config.log_level],
+        default=logging._levelToName[config.server.log_level],
         choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
-        help=f"日志级别 (默认：{logging._levelToName[server_config.log_level]})"
+        help=f"日志级别 (默认：{logging._levelToName[config.server.log_level]})"
     )
     parser.add_argument(
         "--log-dir",
         type=str,
-        default=server_config.log_dir,
+        default=config.server.log_dir,
         metavar="DIR",
-        help=f"日志目录 (默认：{server_config.log_dir})"
+        help=f"日志目录 (默认：{config.server.log_dir})"
     )
     parser.add_argument(
         "--debug",
@@ -156,21 +155,21 @@ API 端点:
     parser.add_argument(
         "--temp-dir",
         type=str,
-        default=server_config.temp_dir,
+        default=config.server.temp_dir,
         metavar="DIR",
-        help=f"临时分片目录 (默认：{server_config.temp_dir})"
+        help=f"临时分片目录 (默认：{config.server.temp_dir})"
     )
     parser.add_argument(
         "--output-dir",
         type=str,
-        default=server_config.output_dir,
+        default=config.server.output_dir,
         metavar="DIR",
-        help=f"输出目录 (默认：{server_config.output_dir})"
+        help=f"输出目录 (默认：{config.server.output_dir})"
     )
     return parser.parse_args()
 
 
-def main():
+async def main():
     """主函数"""
     args = parse_args()
 
@@ -185,39 +184,44 @@ def main():
     config.update_server(args_dict)
 
     # 创建日志目录
-    Path(server_config.log_dir).mkdir(parents=True, exist_ok=True)
+    Path(config.server.log_dir).mkdir(parents=True, exist_ok=True)
     # 创建临时目录
-    Path(server_config.temp_dir).mkdir(parents=True, exist_ok=True)
+    Path(config.server.temp_dir).mkdir(parents=True, exist_ok=True)
     # 创建输出目录
-    Path(server_config.output_dir).mkdir(parents=True, exist_ok=True)
+    Path(config.server.output_dir).mkdir(parents=True, exist_ok=True)
 
-    # TODO: 初始化日志系统
-    logger.setup_logger(server_config)
+    logger.setup_logger(config.server)
 
     # 打印所有配置
     logging.info(f"启动 m3u8 下载服务")
     logging.info("===== 服务器配置 =====")
-    logging.info(f"监听地址: {server_config.host}:{server_config.port}")
-    logging.info(f"最大并发数: {server_config.max_threads}")
-    logging.info(f"日志级别: {server_config.log_level}")
-    logging.info(f"日志目录: {server_config.log_dir}")
-    logging.info(f"调试模式: {server_config.debug}")
-    logging.info(f"临时文件目录: {server_config.temp_dir}")
-    logging.info(f"输出目录: {server_config.output_dir}")
+    logging.info(f"监听地址: {config.server.host}:{config.server.port}")
+    logging.info(f"最大并发数: {config.server.max_threads}")
+    logging.info(f"日志级别: {config.server.log_level}")
+    logging.info(f"日志目录: {config.server.log_dir}")
+    logging.info(f"调试模式: {config.server.debug}")
+    logging.info(f"临时文件目录: {config.server.temp_dir}")
+    logging.info(f"输出目录: {config.server.output_dir}")
     logging.info("======================")
 
-    # 启动 Quart 应用
-    # app.run(
-    #     host=args.host,
-    #     port=args.port,
-    #     debug=args.debug
-    # )
-    import asyncio
     import task
+    from hypercorn.asyncio import serve
+    from hypercorn.config import Config
 
-    asyncio.run(task.add('https://asmr.121231234.xyz/asmr6/%E5%B0%8F%E7%8B%B8/31.m3u8?sign=Xaw-ie3jzZxpyBO9cUzBN0j57OUaGSZwjPMoIhIxoAA=:1851477223', 4))
-    # asyncio.run(download('https://surrit.com/2439bebd-d0fb-479e-83f8-acd86b8f9c2c/playlist.m3u8'))
+    asyncio.create_task(task.queued_task_executor())
 
+    await task.add('https://surrit.com/2439bebd-d0fb-479e-83f8-acd86b8f9c2c/playlist.m3u8', 1, queued=True)
+
+    await asyncio.sleep(5)
+
+    await task.add('https://asmr.121231234.xyz/asmr6/%E5%B0%8F%E7%8B%B8/31.m3u8?sign=Xaw-ie3jzZxpyBO9cUzBN0j57OUaGSZwjPMoIhIxoAA=:1851477223', 4)
+
+    # 使用 Hypercorn 启动 Quart 应用
+    hypercorn_config = Config()
+    hypercorn_config.bind = [f"{args.host}:{args.port}"]
+    hypercorn_config.debug = args.debug
+    
+    await serve(app, hypercorn_config)
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
