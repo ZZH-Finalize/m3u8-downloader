@@ -9,7 +9,7 @@ class ServerConfig(BaseModel):
     port: int = 6900
     max_threads: int = 32
     log_level: int = logging.INFO
-    log_dir: Path = Path("logs")
+    log_dir: Path = Path("data/logs")
     debug: bool = False
     temp_dir: Path = Path("data/task_cahce")
     output_dir: Path = Path("output")

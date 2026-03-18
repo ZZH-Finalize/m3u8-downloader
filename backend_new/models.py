@@ -1,10 +1,8 @@
 from bitarray import bitarray
-from pydantic import BaseModel, Field, computed_field, field_serializer, field_validator
+from pydantic import BaseModel, Field, field_serializer, field_validator
 from typing import Optional
 from enum import Enum
 from datetime import datetime
-from hashlib import md5 as hash_func
-
 
 class TaskStatus(str, Enum):
     """任务状态枚举"""
@@ -58,13 +56,6 @@ class MetaData(BaseModel):
     downloaded_mask: bitarray = Field(default_factory=bitarray)
     segments_num: int = 0
     segments: list[str] = []
-    id: str = Field(exclude=True, repr=False)
-
-    def __init__(self, **data):
-        # 在创建时根据 url 计算 id
-        if 'url' in data:
-            data['id'] = hash_func(data['url'].encode('utf-8')).hexdigest()[:16]
-        super().__init__(**data)
 
     @field_serializer('downloaded_mask')
     def serialize_downloaded_mask(self, value: bitarray) -> str:
@@ -88,12 +79,8 @@ class MetaData(BaseModel):
 
 class CacheInfo(BaseModel):
     """缓存信息"""
+    id: str
     metadata: MetaData
-
-    @computed_field
-    @property
-    def id(self) -> str:
-        return self.metadata.id
 
 class ListCacheResponse(BaseModel):
     """缓存列表响应"""

@@ -213,9 +213,9 @@ def main():
     #     debug=args.debug
     # )
     import asyncio
-    from steps import download
+    import task
 
-    asyncio.run(download('https://asmr.121231234.xyz/asmr6/%E5%B0%8F%E7%8B%B8/31.m3u8?sign=Xaw-ie3jzZxpyBO9cUzBN0j57OUaGSZwjPMoIhIxoAA=:1851477223', 4))
+    asyncio.run(task.add('https://asmr.121231234.xyz/asmr6/%E5%B0%8F%E7%8B%B8/31.m3u8?sign=Xaw-ie3jzZxpyBO9cUzBN0j57OUaGSZwjPMoIhIxoAA=:1851477223', 4))
     # asyncio.run(download('https://surrit.com/2439bebd-d0fb-479e-83f8-acd86b8f9c2c/playlist.m3u8'))
 
 
