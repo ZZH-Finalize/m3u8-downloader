@@ -10,6 +10,7 @@ logger = get_logger(__name__)
 
 def clear_segments(task: DownloadTask):
     shutil.rmtree(task.segments_dir)
+    task.metadata.downloaded_mask.setall(0)
 
 async def merge_segments(task: DownloadTask):
     task.state = TaskStatus.MERGING

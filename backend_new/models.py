@@ -28,7 +28,6 @@ class DownloadResponse(BaseModel):
     """下载任务响应"""
     success: bool
     task_id: str
-    status: TaskStatus
 
 class TaskInfo(BaseModel):
     """任务信息"""
@@ -39,9 +38,9 @@ class TaskInfo(BaseModel):
 
 class ListTaskResponse(BaseModel):
     """任务列表响应"""
-    success: bool
-    tasks: list[TaskInfo]
-    total_count: int
+    success: bool = False
+    tasks: list[TaskInfo] = []
+    total_count: int = 0
 
 class MetaData(BaseModel):
     """缓存元数据"""

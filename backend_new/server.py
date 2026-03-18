@@ -10,16 +10,18 @@ m3u8 下载服务 - 异步后端 API 服务 (重写版)
 - 任务管理器：跟踪和管理所有后台任务
 """
 
-import sys
+import task
 import argparse, asyncio
 import logging, logger
 from pathlib import Path
-from models import DownloadArgs, DownloadResponse
+from models import DownloadArgs, DownloadResponse, TaskStatus
 
 from quart import Quart, request, jsonify
 from quart_cors import cors
 
 import config
+
+logger_obj = logger.get_logger()
 
 # ===== Quart 应用初始化 =====
 app = cors(Quart(__name__))
@@ -29,36 +31,69 @@ app = cors(Quart(__name__))
 @app.route('/health', methods=['GET'])
 async def health_check():
     """健康检查端点"""
-    return jsonify({'status': 'ok'})
+    return jsonify({'version': config.server.version})
 
 
 @app.route('/api/config', methods=['GET'])
 async def get_server_config():
     """获取服务器配置信息"""
-    return jsonify(config.server)
+    return jsonify(config.server.model_dump(mode='json'))
 
 
 @app.route('/api/download', methods=['POST'])
 async def download():
     """提交下载任务（异步）"""
-    return jsonify()
+    data = await request.get_json()
+
+    url = data.get('url')
+    if not url:
+        return jsonify({'success': False, 'error': '缺少 url 参数'}), 400
+
+    max_threads = data.get('threads', config.server.max_threads)
+    output_name = data.get('output_name', 'video.mp4')
+    queued = data.get('queued', False)
+    keep_cache = data.get('keep_cache', False)
+
+    # 限制 max_threads 不超过服务器配置
+    max_threads = min(max_threads, config.server.max_threads)
+
+    logger_obj.info(f'收到下载任务: {url}')
+
+    task_obj = await task.add(url, max_threads, output_name, keep_cache, queued)
+
+    if task_obj is None:
+        return jsonify({'success': False, 'error': '任务已存在'}), 400
+
+    return jsonify(DownloadResponse(success=True,task_id=task_obj.id).model_dump(mode='json'))
 
 
 @app.route('/api/tasks', methods=['GET'])
 async def list_tasks():
     """列出所有任务 ID 及下载进度"""
-    return jsonify()
+    return jsonify(task.list_task())
 
 
 @app.route('/api/tasks/<task_id>', methods=['GET'])
 async def get_task_status(task_id: str):
     """获取任务状态"""
-    return jsonify()
+    return jsonify(task.get(task_id))
 
 
 @app.route('/api/tasks/<task_id>', methods=['DELETE'])
 async def delete_task(task_id: str):
     """删除任务"""
+    return jsonify()
+
+
+@app.route('/api/tasks/<task_id>/pause', methods=['POST'])
+async def pause_task(task_id: str):
+    """暂停任务"""
+    return jsonify()
+
+
+@app.route('/api/tasks/<task_id>/resume', methods=['POST'])
+async def resume_task(task_id: str):
+    """恢复任务"""
     return jsonify()
 
 
@@ -204,8 +239,7 @@ async def main():
     logging.info(f"输出目录: {config.server.output_dir}")
     logging.info("======================")
 
-    import task
-
+    # 队列下载worker
     asyncio.create_task(task.queued_task_executor())
 
     from hypercorn.asyncio import serve
@@ -215,7 +249,7 @@ async def main():
     hypercorn_config = Config()
     hypercorn_config.bind = [f"{config.server.host}:{config.server.port}"]
     hypercorn_config.debug = config.server.debug
-    
+
     await serve(app, hypercorn_config)
 
 if __name__ == "__main__":

@@ -1,7 +1,7 @@
 import aiofiles, asyncio
 import config
 
-from models import MetaData, SegmentInfo, TaskStatus
+from models import MetaData, SegmentInfo, TaskStatus, TaskInfo, ListTaskResponse
 from logger import get_logger
 from pathlib import Path
 
@@ -10,12 +10,13 @@ logger = get_logger(__name__)
 METADATA_FILE_NAME = 'metadata.json'
 
 class DownloadTask:
-    def __init__(self, id: str, url: str, max_threads: int, output_name: str) -> None:
+    def __init__(self, id: str, url: str, threads: int, output_name: str, keep_cache: bool = False) -> None:
         self.id = id
         self.metadata = MetaData(url=url, base_url='')
 
         self.metadata.output_name = output_name
-        self.max_threads = max_threads
+        self.threads = threads
+        self.keep_cache = keep_cache
 
         self.old_state = TaskStatus.PENDING
 
@@ -91,6 +92,12 @@ class DownloadTask:
         await self.cache_file(config.server.segments_dir / fn, content, mode='wb')
         self.metadata.downloaded_mask[id] = 1
 
+    def to_response(self) -> TaskInfo:
+        return TaskInfo(task_id=self.id, 
+                        segments_downloaded=self.metadata.downloaded_mask.count(),
+                        total_segments=self.metadata.segments_num,
+                        output_name=self.metadata.output_name)
+
 from parser import parse_m3u8
 from downloader import download_segments
 from postprocess import merge_segments, clear_segments
@@ -115,7 +122,8 @@ async def __exec(task: DownloadTask, queued: bool = False):
         await download_segments(task)
         await merge_segments(task)
 
-        clear_segments(task)
+        if False == task.keep_cache:
+            clear_segments(task)
 
         task.state = TaskStatus.COMPLETED
         await task.flush_cache()
@@ -138,18 +146,34 @@ async def queued_task_executor():
         await __exec(task, True)
         current_queued_task = None
 
-async def add(url: str, max_threads: int = config.server.max_threads, output_name: str = 'video.mp4', queued: bool = False):
+async def add(url: str, threads: int = config.server.max_threads, output_name: str = 'video.mp4', keep_cache: bool = False, queued: bool = False):
     task_id = hash_func(url.encode('utf-8')).hexdigest()[:16]
 
     if task_id  in task_map:
-        return False
+        return None
 
-    task = DownloadTask(task_id, url, max_threads, output_name)
+    task = DownloadTask(task_id, url, threads, output_name, keep_cache)
 
     if queued:
         await queue.put(task)
     else:
         asyncio.create_task(__exec(task))
 
-    return True
+    return task
+
+def list_task() -> ListTaskResponse:
+    tasks = ListTaskResponse(success=True)
+
+    for task in task_map.values():
+        tasks.tasks.append(task.to_response())
+
+    tasks.total_count = len(tasks.tasks)
+
+    return tasks
+
+def get(task_id: str) -> TaskInfo | None:
+    if task_id not in task_map:
+        return None
+    
+    return task_map[task_id].to_response()
 

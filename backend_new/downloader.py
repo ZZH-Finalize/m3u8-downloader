@@ -34,9 +34,9 @@ async def download_segment(session: aiohttp.ClientSession, task: DownloadTask):
         url_fn = os.path.basename(unquote(urlparse(segment.url).path))
         abs_url = urljoin(task.metadata.base_url, segment.url)
 
-        logger.info(f'[{task.id}] 下载分片[{segment.id + 1}/{task.metadata.segments_num}]')
-
         for i in range(MAX_RETRY):
+            logger.info(f'[{task.id}] 下载分片[{segment.id + 1}/{task.metadata.segments_num}]')
+
             try:
                 async with session.get(abs_url) as response:
                     response.raise_for_status()
@@ -50,7 +50,7 @@ async def download_segment(session: aiohttp.ClientSession, task: DownloadTask):
         task.url_queue.task_done()
 
 async def download_round(session: aiohttp.ClientSession, task: DownloadTask):
-    tasks = [asyncio.create_task(download_segment(session, task)) for _ in range(task.max_threads)]
+    tasks = [asyncio.create_task(download_segment(session, task)) for _ in range(task.threads)]
 
     await asyncio.gather(*tasks)
     # await task.url_queue.join()
@@ -58,13 +58,13 @@ async def download_round(session: aiohttp.ClientSession, task: DownloadTask):
 
 async def download_segments(task: DownloadTask):
     task.state = TaskStatus.DOWNLOADING
-    logger.info(f'[{task.id}] 开始下载')
+    logger.info(f'[{task.id}] 开始下载: {task.url}')
     # 设置执行标志
     task.continue_evt.set()
 
     # 创建 aiohttp session
     timeout = aiohttp.ClientTimeout(total=10)
-    connector = aiohttp.TCPConnector(limit=task.max_threads)
+    connector = aiohttp.TCPConnector(limit=task.threads)
 
     try:
         async with aiohttp.ClientSession(headers=HEADERS,
