@@ -11,7 +11,7 @@ class ServerConfig(BaseModel):
     log_level: int = logging.INFO
     log_dir: Path = Path("logs")
     debug: bool = False
-    temp_dir: Path = Path("data/temp_segments")
+    temp_dir: Path = Path("data/task_cahce")
     output_dir: str = "output"
 
 # ===== 全局配置 =====

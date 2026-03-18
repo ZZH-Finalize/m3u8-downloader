@@ -4,6 +4,7 @@ from bitarray import bitarray
 from pydantic import BaseModel, Field, computed_field, field_serializer, field_validator
 from typing import Optional
 from enum import Enum
+from pathlib import Path
 from datetime import datetime
 from hashlib import md5 as hash_func
 from config import server_config as config
@@ -50,6 +51,8 @@ class ListTaskResponse(BaseModel):
 
 class MetaData(BaseModel):
     """缓存元数据"""
+    model_config = {'arbitrary_types_allowed': True}
+    
     url: str
 
     output_name: str = 'video.mp4'
@@ -62,7 +65,7 @@ class MetaData(BaseModel):
     @field_serializer('downloaded_mask')
     def serialize_downloaded_mask(self, value: bitarray) -> str:
         """将 bitarray 序列化为十六进制字符串"""
-        return value.tohex() # type: ignore[attr-defined]
+        return value.tobytes().hex()
 
     @field_validator('downloaded_mask', mode='before')
     @classmethod
@@ -73,7 +76,7 @@ class MetaData(BaseModel):
 
         if isinstance(value, str):
             result = bitarray()
-            result.fromhex(value) # type: ignore[attr-defined]
+            result.frombytes(bytes.fromhex(value))
             return result
 
         return bitarray()
@@ -88,12 +91,24 @@ class CacheInfo(BaseModel):
     def id(self) -> str:
         return hash_func(self.metadata.url.encode('utf-8')).hexdigest()[:16]
     
+    async def cache_file(self, fn: Path | str, content, mode: str = 'w'):
+        async with aiofiles.open(config.temp_dir / self.id / fn, mode) as f: # pyright: ignore[reportArgumentType, reportCallIssue]
+            await f.write(content)
+
     async def flush(self):
-        async with aiofiles.open(config.temp_dir / self.id / 'metadata.json', "w") as f:
-            await f.write(self.metadata.model_dump_json())
+        await self.cache_file('metadata.json', self.metadata.model_dump_json())
+
+    async def save_segment(self, fn: str, id: int, content):
+        await self.cache_file(Path('segments') / fn, content, mode='wb')
+        self.metadata.downloaded_mask[id] = 1
 
 class ListCacheResponse(BaseModel):
     """缓存列表响应"""
     success: bool
     caches: list[CacheInfo]
     total_count: int
+
+class SegmentInfo(BaseModel):
+    """分片信息"""
+    id: int
+    url: str

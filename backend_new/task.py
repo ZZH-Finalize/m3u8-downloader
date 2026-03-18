@@ -1,6 +1,6 @@
-import aiofiles, asyncio
+import aiofiles, asyncio, aiohttp
 
-from models import CacheInfo, MetaData
+from models import CacheInfo, MetaData, SegmentInfo
 from config import server_config as config
 from logger import get_logger
 
@@ -16,16 +16,24 @@ class DownloadTask:
         self.__cache_dir = config.temp_dir / self.cache.id
         self.__metadata_file = self.__cache_dir / METADATA_FILE_NAME
 
-        # 并发数量限制
-        self.semaphore = asyncio.Semaphore(config.max_threads)
+        # 待下载分片queue
+        self.url_queue: asyncio.Queue[SegmentInfo | None] = asyncio.Queue()
         # 暂停控制
         self.continue_evt = asyncio.Event()
+        # 完成控制
+        self.complete = asyncio.Event()
         # 协程池
         self.task_pool = []
+
+        # http会话
+        self.session: aiohttp.ClientSession | None = None
 
         # 创建任务的cache路径
         cache_dir = config.temp_dir / self.cache.id
         cache_dir.mkdir(parents=True, exist_ok=True)
+
+        segments_dir = cache_dir / 'segments'
+        segments_dir.mkdir(parents=True, exist_ok=True)
 
     @property
     def id(self):
