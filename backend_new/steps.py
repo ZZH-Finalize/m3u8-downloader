@@ -7,11 +7,12 @@ from postprocess import merge_segments
 
 logger = get_logger('task')
 
-async def download(url: str):
+async def download(url: str, output_name: str = 'video.mp4'):
     try:
-        task = DownloadTask(url)
+        task = DownloadTask(url, output_name)
 
         if task.cache_exists():
+            logger.info(f'[{task.id}] 元数据文件存在')
             await task.load_cache()
         else:
             await parse_m3u8(task)

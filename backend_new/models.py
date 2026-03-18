@@ -1,10 +1,12 @@
-from pydantic import BaseModel, Field, computed_field
+import aiofiles
+
+from bitarray import bitarray
+from pydantic import BaseModel, Field, computed_field, field_serializer, field_validator
 from typing import Optional
 from enum import Enum
 from datetime import datetime
 from hashlib import md5 as hash_func
 from config import server_config as config
-import aiofiles
 
 
 class TaskStatus(str, Enum):
@@ -50,12 +52,32 @@ class MetaData(BaseModel):
     """缓存元数据"""
     url: str
 
-    created_at: datetime = Field(default_factory=datetime.now)
-    state: TaskStatus = TaskStatus.PENDING
-    segments: list[str] = []  # 分片 URL 列表
-    downloaded_mask: int = 0
-    totol_slice: int = 0
     output_name: str = 'video.mp4'
+    state: TaskStatus = TaskStatus.PENDING
+    created_at: datetime = Field(default_factory=datetime.now)
+    downloaded_mask: bitarray = Field(default_factory=bitarray)
+    segments_num: int = 0
+    segments: list[str] = []
+
+    @field_serializer('downloaded_mask')
+    def serialize_downloaded_mask(self, value: bitarray) -> str:
+        """将 bitarray 序列化为十六进制字符串"""
+        return value.tohex() # type: ignore[attr-defined]
+
+    @field_validator('downloaded_mask', mode='before')
+    @classmethod
+    def deserialize_downloaded_mask(cls, value):
+        """从十六进制字符串反序列化为 bitarray"""
+        if isinstance(value, bitarray):
+            return value
+
+        if isinstance(value, str):
+            result = bitarray()
+            result.fromhex(value) # type: ignore[attr-defined]
+            return result
+
+        return bitarray()
+
 
 class CacheInfo(BaseModel):
     """缓存信息"""

@@ -1,18 +1,27 @@
+import aiofiles, asyncio
+
 from models import CacheInfo, MetaData
 from config import server_config as config
 from logger import get_logger
-import aiofiles
 
 logger = get_logger('task')
 
 METADATA_FILE_NAME = 'metadata.json'
 
 class DownloadTask:
-    def __init__(self, url: str) -> None:
+    def __init__(self, url: str, output_name: str) -> None:
         self.cache = CacheInfo(metadata=MetaData(url=url))
+        self.cache.metadata.output_name = output_name
         self.base_url = ''
         self.__cache_dir = config.temp_dir / self.cache.id
         self.__metadata_file = self.__cache_dir / METADATA_FILE_NAME
+
+        # 并发数量限制
+        self.semaphore = asyncio.Semaphore(config.max_threads)
+        # 暂停控制
+        self.continue_evt = asyncio.Event()
+        # 协程池
+        self.task_pool = []
 
         # 创建任务的cache路径
         cache_dir = config.temp_dir / self.cache.id
@@ -51,7 +60,8 @@ class DownloadTask:
             async with aiofiles.open(self.__metadata_file, 'r') as f:
                 metadata = await f.read()
 
-            self.cache.metadata.model_validate_json(metadata)
+            self.cache.metadata = MetaData.model_validate_json(metadata)
+            logger.info(f'[{self.id}] 载入元数据')
         except Exception as e:
             logger.warning(f'[{self.id}] 元数据加载异常: {e.with_traceback(e.__traceback__)}')
             raise

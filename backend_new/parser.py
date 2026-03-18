@@ -13,6 +13,7 @@ from models import TaskStatus
 from logger import get_logger
 from config import server_config as config
 from urllib.parse import urlparse, unquote
+from bitarray import bitarray
 
 logger = get_logger('parser')
 
@@ -50,13 +51,15 @@ async def parse_m3u8(task: DownloadTask):
         playlists.sort(key=lambda x: x.stream_info.resolution[1], reverse=True)
         # first is the best resolution
         best_resolution = playlists[0]
+        logger.info(f'[{task.id}] 自动选择最优分辨率: {best_resolution.stream_info.resolution[0]}x{best_resolution.stream_info.resolution[1]}')
         # fetch best m3u8
         best_m3u8 = await fetch_m3u8(task.id, best_resolution.absolute_uri)
-
-        logger.info(f'[{task.id}] 自动选择最优分辨率: {best_resolution.stream_info.resolution[0]}x{best_resolution.stream_info.resolution[1]}')
         selected_m3u8 = best_m3u8
 
     task.base_url = selected_m3u8.base_uri
     task.metadata.segments = selected_m3u8.files.copy()
+    task.metadata.segments_num = len(task.metadata.segments)
+    task.metadata.downloaded_mask = bitarray(task.metadata.segments_num)
+    task.metadata.downloaded_mask.setall(0)
 
     await task.cache.flush()
