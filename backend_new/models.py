@@ -48,7 +48,7 @@ class ListTaskResponse(BaseModel):
 class MetaData(BaseModel):
     """缓存元数据"""
     model_config = {'arbitrary_types_allowed': True}
-    
+
     url: str
     base_url: str
 
@@ -58,6 +58,13 @@ class MetaData(BaseModel):
     downloaded_mask: bitarray = Field(default_factory=bitarray)
     segments_num: int = 0
     segments: list[str] = []
+    id: str = Field(exclude=True, repr=False)
+
+    def __init__(self, **data):
+        # 在创建时根据 url 计算 id
+        if 'url' in data:
+            data['id'] = hash_func(data['url'].encode('utf-8')).hexdigest()[:16]
+        super().__init__(**data)
 
     @field_serializer('downloaded_mask')
     def serialize_downloaded_mask(self, value: bitarray) -> str:
@@ -86,7 +93,7 @@ class CacheInfo(BaseModel):
     @computed_field
     @property
     def id(self) -> str:
-        return hash_func(self.metadata.url.encode('utf-8')).hexdigest()[:16]
+        return self.metadata.id
 
 class ListCacheResponse(BaseModel):
     """缓存列表响应"""
