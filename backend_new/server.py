@@ -205,21 +205,16 @@ async def main():
     logging.info("======================")
 
     import task
-    from hypercorn.asyncio import serve
-    from hypercorn.config import Config
 
     asyncio.create_task(task.queued_task_executor())
 
-    await task.add('https://surrit.com/2439bebd-d0fb-479e-83f8-acd86b8f9c2c/playlist.m3u8', 1, queued=True)
-
-    await asyncio.sleep(5)
-
-    await task.add('https://asmr.121231234.xyz/asmr6/%E5%B0%8F%E7%8B%B8/31.m3u8?sign=Xaw-ie3jzZxpyBO9cUzBN0j57OUaGSZwjPMoIhIxoAA=:1851477223', 4)
+    from hypercorn.asyncio import serve
+    from hypercorn.config import Config
 
     # 使用 Hypercorn 启动 Quart 应用
     hypercorn_config = Config()
-    hypercorn_config.bind = [f"{args.host}:{args.port}"]
-    hypercorn_config.debug = args.debug
+    hypercorn_config.bind = [f"{config.server.host}:{config.server.port}"]
+    hypercorn_config.debug = config.server.debug
     
     await serve(app, hypercorn_config)
 
