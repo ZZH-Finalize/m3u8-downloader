@@ -1,13 +1,9 @@
-import aiofiles
-
 from bitarray import bitarray
 from pydantic import BaseModel, Field, computed_field, field_serializer, field_validator
 from typing import Optional
 from enum import Enum
-from pathlib import Path
 from datetime import datetime
 from hashlib import md5 as hash_func
-from config import server_config as config
 
 
 class TaskStatus(str, Enum):
@@ -54,6 +50,7 @@ class MetaData(BaseModel):
     model_config = {'arbitrary_types_allowed': True}
     
     url: str
+    base_url: str
 
     output_name: str = 'video.mp4'
     state: TaskStatus = TaskStatus.PENDING
@@ -90,17 +87,6 @@ class CacheInfo(BaseModel):
     @property
     def id(self) -> str:
         return hash_func(self.metadata.url.encode('utf-8')).hexdigest()[:16]
-    
-    async def cache_file(self, fn: Path | str, content, mode: str = 'w'):
-        async with aiofiles.open(config.temp_dir / self.id / fn, mode) as f: # pyright: ignore[reportArgumentType, reportCallIssue]
-            await f.write(content)
-
-    async def flush(self):
-        await self.cache_file('metadata.json', self.metadata.model_dump_json())
-
-    async def save_segment(self, fn: str, id: int, content):
-        await self.cache_file(Path('segments') / fn, content, mode='wb')
-        self.metadata.downloaded_mask[id] = 1
 
 class ListCacheResponse(BaseModel):
     """缓存列表响应"""

@@ -4,12 +4,13 @@ from task import DownloadTask
 from parser import parse_m3u8
 from downloader import download_segments
 from postprocess import merge_segments
+from config import server_config as config
 
-logger = get_logger('task')
+logger = get_logger(__name__)
 
-async def download(url: str, output_name: str = 'video.mp4'):
+async def download(url: str, max_threads: int = config.max_threads, output_name: str = 'video.mp4'):
     try:
-        task = DownloadTask(url, output_name)
+        task = DownloadTask(url, max_threads, output_name)
 
         if task.cache_exists():
             logger.info(f'[{task.id}] 元数据文件存在')
@@ -21,9 +22,9 @@ async def download(url: str, output_name: str = 'video.mp4'):
         await merge_segments(task)
 
         task.state = TaskStatus.COMPLETED
-        await task.cache.flush()
+        await task.flush_cache()
 
     except Exception as e:
         task.state = TaskStatus.FAILED
-        logger.error(f'[{task.id}] 任务出现异常: {e.with_traceback(e.__traceback__)}')
+        logger.error(f'[{task.id}] 任务出现异常: {e}')
 

@@ -16,3 +16,10 @@ class ServerConfig(BaseModel):
 
 # ===== 全局配置 =====
 server_config = ServerConfig()
+
+
+def update_server(args: dict):
+    global server_config
+
+    server_config = ServerConfig.model_validate(args)
+

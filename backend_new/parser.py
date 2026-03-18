@@ -15,7 +15,7 @@ from config import server_config as config
 from urllib.parse import urlparse, unquote
 from bitarray import bitarray
 
-logger = get_logger('parser')
+logger = get_logger(__name__)
 
 async def fetch_m3u8(task_id: str, url: str) -> m3u8.M3U8:
     try:
@@ -32,7 +32,7 @@ async def fetch_m3u8(task_id: str, url: str) -> m3u8.M3U8:
         return m3u8.loads(m3u8_content, uri=url)
 
     except Exception as e:
-        logger.error(f'获取m3u8文件失败: {e.with_traceback(e.__traceback__)}')
+        logger.error(f'获取m3u8文件失败: {e}')
         raise
 
 async def parse_m3u8(task: DownloadTask):
@@ -56,10 +56,10 @@ async def parse_m3u8(task: DownloadTask):
         best_m3u8 = await fetch_m3u8(task.id, best_resolution.absolute_uri)
         selected_m3u8 = best_m3u8
 
-    task.base_url = selected_m3u8.base_uri
+    task.metadata.base_url = selected_m3u8.base_uri
     task.metadata.segments = selected_m3u8.files.copy()
     task.metadata.segments_num = len(task.metadata.segments)
     task.metadata.downloaded_mask = bitarray(task.metadata.segments_num)
     task.metadata.downloaded_mask.setall(0)
 
-    await task.cache.flush()
+    await task.flush_cache()

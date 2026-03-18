@@ -19,7 +19,8 @@ from models import DownloadArgs, DownloadResponse
 from quart import Quart, request, jsonify
 from quart_cors import cors
 
-from config import ServerConfig, server_config
+import config
+from config import server_config
 
 # ===== Quart 应用初始化 =====
 app = cors(Quart(__name__))
@@ -117,35 +118,35 @@ API 端点:
     parser.add_argument(
         "--host",
         type=str,
-        default="127.0.0.1",
-        help="监听地址 IP (默认：127.0.0.1)"
+        default=server_config.host,
+        help=f"监听地址 IP (默认：{server_config.host})"
     )
     parser.add_argument(
         "--port",
         type=int,
-        default=6900,
-        help="监听端口 (默认：6900)"
+        default=server_config.port,
+        help=f"监听端口 (默认：{server_config.port})"
     )
     parser.add_argument(
         "--max-threads",
         type=int,
-        default=32,
+        default=server_config.max_threads,
         metavar="N",
-        help="下载并发数上限 (默认：32)。如果 API 请求传入的 threads 值大于此值，将使用此值。"
+        help=f"下载并发数上限 (默认：{server_config.max_threads})。如果 API 请求传入的 threads 值大于此值，将使用此值。"
     )
     parser.add_argument(
         "--log-level",
         type=str,
-        default="INFO",
+        default=server_config.log_level,
         choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
-        help="日志级别 (默认：INFO)"
+        help=f"日志级别 (默认：{server_config.log_level})"
     )
     parser.add_argument(
         "--log-dir",
         type=str,
-        default="logs",
+        default=server_config.log_dir,
         metavar="DIR",
-        help="日志目录 (默认：logs)"
+        help=f"日志目录 (默认：{server_config.log_dir})"
     )
     parser.add_argument(
         "--debug",
@@ -155,24 +156,22 @@ API 端点:
     parser.add_argument(
         "--temp-dir",
         type=str,
-        default="data/temp_segments",
+        default=server_config.temp_dir,
         metavar="DIR",
-        help="临时分片目录 (默认：data/temp_segments)"
+        help=f"临时分片目录 (默认：{server_config.temp_dir})"
     )
     parser.add_argument(
         "--output-dir",
         type=str,
-        default="output",
+        default=server_config.output_dir,
         metavar="DIR",
-        help="输出目录 (默认：output)"
+        help=f"输出目录 (默认：{server_config.output_dir})"
     )
     return parser.parse_args()
 
 
 def main():
     """主函数"""
-    global server_config
-
     args = parse_args()
 
     # 将 argparse.Namespace 转换为字典
@@ -183,7 +182,7 @@ def main():
     args_dict['log_level'] = log_level
 
     # 使用 model_validate 创建 server_config
-    server_config = ServerConfig.model_validate(args_dict)
+    config.update_server(args_dict)
 
     # 创建日志目录
     Path(server_config.log_dir).mkdir(parents=True, exist_ok=True)
@@ -216,7 +215,7 @@ def main():
     import asyncio
     from steps import download
 
-    asyncio.run(download('https://asmr.121231234.xyz/asmr6/%E5%B0%8F%E7%8B%B8/31.m3u8?sign=Xaw-ie3jzZxpyBO9cUzBN0j57OUaGSZwjPMoIhIxoAA=:1851477223'))
+    asyncio.run(download('https://asmr.121231234.xyz/asmr6/%E5%B0%8F%E7%8B%B8/31.m3u8?sign=Xaw-ie3jzZxpyBO9cUzBN0j57OUaGSZwjPMoIhIxoAA=:1851477223', 4))
     # asyncio.run(download('https://surrit.com/2439bebd-d0fb-479e-83f8-acd86b8f9c2c/playlist.m3u8'))
 
 

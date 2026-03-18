@@ -14,8 +14,8 @@ from typing import Optional
 from config import ServerConfig
 
 # 默认配置
-LOG_FORMAT = "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
-CONSOLE_FORMAT = "[%(name)s][%(levelname)s] %(message)s"
+LOG_FORMAT = "%(asctime)s\n[%(levelname)s][%(name)s]%(message)s"
+CONSOLE_FORMAT = "[%(name)s][%(levelname)s]%(message)s"
 DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
 
 
