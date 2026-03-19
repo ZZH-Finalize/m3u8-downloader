@@ -13,6 +13,10 @@ def clear_segments(task: DownloadTask):
     task.metadata.downloaded_mask.setall(0)
 
 async def merge_segments(task: DownloadTask):
+    if task.state == TaskStatus.PAUSED:
+        logger.debug(f'[{task.id}] 任务暂停后处理, 等待恢复')
+        await task.continue_evt.wait()
+
     task.state = TaskStatus.MERGING
     logger.info(f'[{task.id}] 开始后处理')
 

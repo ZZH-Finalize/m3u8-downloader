@@ -59,6 +59,7 @@ class DownloadTask:
 
     def pause(self):
         if self.state not in (TaskStatus.PENDING, TaskStatus.PARSING, TaskStatus.DOWNLOADING):
+            logger.warning(f'[{self.id}] 无法暂停, 因为当前状态: {self.state}')
             return
 
         logger.info(f'[{self.id}] 暂停执行')
@@ -69,6 +70,7 @@ class DownloadTask:
 
     def resume(self):
         if self.state != TaskStatus.PAUSED:
+            logger.warning(f'[{self.id}] 无法恢复, 因为当前状态: {self.state}')
             return
 
         logger.info(f'[{self.id}] 恢复执行')
@@ -117,12 +119,21 @@ task_map: dict[str, DownloadTask] = {}
 queue: asyncio.Queue[DownloadTask] = asyncio.Queue()
 current_queued_task: DownloadTask | None = None
 
+concur_task_cnt: int = 0
+concur_task_cnt_lock: asyncio.Lock = asyncio.Lock()
+
 async def __exec(task: DownloadTask, queued: bool = False):
+    global concur_task_cnt
+
     try:
-        if False == queued and current_queued_task is not None:
-            # 并发任务启动时, 暂停队列任务
-            current_queued_task.pause()
-            logger.info(f'并发任务[{task.id}]启动, 暂停队列任务 [{current_queued_task.id}]')
+        if False == queued:
+            if concur_task_cnt == 0 and current_queued_task is not None:
+                # 并发任务启动时, 暂停队列任务
+                logger.info(f'并发任务[{task.id}]启动, 暂停队列任务 [{current_queued_task.id}]')
+                current_queued_task.pause()
+
+            async with concur_task_cnt_lock:
+                concur_task_cnt += 1
 
         if task.cache_exists():
             logger.info(f'[{task.id}] 元数据文件存在')
@@ -149,10 +160,14 @@ async def __exec(task: DownloadTask, queued: bool = False):
     finally:
         logger.info(f'任务 [{task.id}] 停止')
 
-        if False == queued and current_queued_task is not None:
-            # 并发任务结束后, 恢复队列任务
-            current_queued_task.resume()
-            logger.info(f'并发任务[{task.id}]停止, 恢复队列任务 [{current_queued_task.id}]')
+        if False == queued:
+            async with concur_task_cnt_lock:
+                concur_task_cnt -= 1
+
+            if concur_task_cnt == 0 and current_queued_task is not None:
+                # 并发任务结束后, 恢复队列任务
+                current_queued_task.resume()
+                logger.info(f'并发任务[{task.id}]停止, 恢复队列任务 [{current_queued_task.id}]')
 
 async def queued_task_executor():
     global current_queued_task
@@ -170,7 +185,7 @@ async def add(param: DownloadArgs) -> DownloadResponse:
     task_id = hash_func(param.url.encode('utf-8')).hexdigest()[:16]
 
     if task_id in task_map:
-        logger.info(f'已存在的任务')
+        logger.info(f'任务[{task_id}]已存在')
         # todo: implement retry logic
         return DownloadResponse(task_id=task_id)
 

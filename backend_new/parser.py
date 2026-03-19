@@ -35,6 +35,10 @@ async def fetch_m3u8(task_id: str, url: str) -> m3u8.M3U8:
         raise
 
 async def parse_m3u8(task: DownloadTask):
+    if task.state == TaskStatus.PAUSED:
+        logger.debug(f'[{task.id}] 任务暂停解析, 等待恢复')
+        await task.continue_evt.wait()
+
     task.state = TaskStatus.PARSING
     m3u8_obj = await fetch_m3u8(task.id, task.url)
 

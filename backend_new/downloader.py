@@ -57,6 +57,10 @@ async def download_round(session: aiohttp.ClientSession, task: DownloadTask):
     await task.flush_cache()
 
 async def download_segments(task: DownloadTask):
+    if task.state == TaskStatus.PAUSED:
+        logger.debug(f'[{task.id}] 任务暂停下载, 等待恢复')
+        await task.continue_evt.wait()
+
     task.state = TaskStatus.DOWNLOADING
     logger.info(f'[{task.id}] 开始下载: {task.url}')
     # 设置执行标志
