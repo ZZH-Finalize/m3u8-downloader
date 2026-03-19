@@ -50,10 +50,10 @@ async def download_segment(session: aiohttp.ClientSession, task: DownloadTask):
         task.url_queue.task_done()
 
 async def download_round(session: aiohttp.ClientSession, task: DownloadTask):
-    tasks = [asyncio.create_task(download_segment(session, task)) for _ in range(task.threads)]
+    async with asyncio.TaskGroup() as tg:
+        for _ in range(task.threads):
+            tg.create_task(download_segment(session, task))
 
-    await asyncio.gather(*tasks)
-    # await task.url_queue.join()
     await task.flush_cache()
 
 async def download_segments(task: DownloadTask):

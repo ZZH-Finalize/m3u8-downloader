@@ -223,3 +223,15 @@ def get(task_id: str) -> TaskInfo | None:
     
     return task_map[task_id].to_response()
 
+def pause(task_id: str):
+    if task_id not in task_map:
+        return
+    
+    return task_map[task_id].pause()
+
+def resume(task_id: str):
+    if task_id not in task_map:
+        return
+    
+    return task_map[task_id].resume()
+

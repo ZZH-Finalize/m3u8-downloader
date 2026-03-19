@@ -77,21 +77,25 @@ async def get_task_status(task_id: str):
     return jsonify(response.model_dump(mode='json'))
 
 
-@app.route('/api/tasks/<task_id>', methods=['DELETE'])
-async def delete_task(task_id: str):
-    """删除任务"""
-    return jsonify()
-
-
 @app.route('/api/tasks/<task_id>/pause', methods=['POST'])
 async def pause_task(task_id: str):
     """暂停任务"""
+    task.pause(task_id)
+
     return jsonify()
 
 
 @app.route('/api/tasks/<task_id>/resume', methods=['POST'])
 async def resume_task(task_id: str):
     """恢复任务"""
+    task.resume(task_id)
+
+    return jsonify()
+
+
+@app.route('/api/tasks/<task_id>', methods=['DELETE'])
+async def delete_task(task_id: str):
+    """删除任务"""
     return jsonify()
 
 
