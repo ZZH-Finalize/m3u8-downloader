@@ -14,7 +14,7 @@ import task
 import argparse, asyncio
 import logging, logger
 from pathlib import Path
-from models import DownloadArgs, DownloadResponse, TaskStatus
+from models import DownloadArgs, DownloadResponse, TaskStatus, TaskInfo
 
 from quart import Quart, request, jsonify
 from quart_cors import cors
@@ -45,38 +45,36 @@ async def download():
     """提交下载任务（异步）"""
     data = await request.get_json()
 
-    url = data.get('url')
-    if not url:
-        return jsonify({'success': False, 'error': '缺少 url 参数'}), 400
+    param = DownloadArgs.model_validate(data)
 
-    max_threads = data.get('threads', config.server.max_threads)
-    output_name = data.get('output_name', 'video.mp4')
-    queued = data.get('queued', False)
-    keep_cache = data.get('keep_cache', False)
+    if not param.url:
+        return jsonify(), 400
 
     # 限制 max_threads 不超过服务器配置
-    max_threads = min(max_threads, config.server.max_threads)
+    param.threads = min(param.threads, config.server.max_threads)
 
-    logger_obj.info(f'收到下载任务: {url}')
+    logger_obj.info(f'收到下载任务: {param.url}')
 
-    task_obj = await task.add(url, max_threads, output_name, keep_cache, queued)
+    response = await task.add(param)
 
-    if task_obj is None:
-        return jsonify({'success': False, 'error': '任务已存在'}), 400
-
-    return jsonify(DownloadResponse(success=True,task_id=task_obj.id).model_dump(mode='json'))
+    return jsonify(response.model_dump(mode='json'))
 
 
 @app.route('/api/tasks', methods=['GET'])
 async def list_tasks():
     """列出所有任务 ID 及下载进度"""
-    return jsonify(task.list_task())
+    return jsonify(task.list_task().model_dump(mode='json'))
 
 
 @app.route('/api/tasks/<task_id>', methods=['GET'])
 async def get_task_status(task_id: str):
     """获取任务状态"""
-    return jsonify(task.get(task_id))
+    response = task.get(task_id)
+
+    if response is None:
+        return jsonify(), 400
+
+    return jsonify(response.model_dump(mode='json'))
 
 
 @app.route('/api/tasks/<task_id>', methods=['DELETE'])

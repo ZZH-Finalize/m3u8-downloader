@@ -1,3 +1,4 @@
+import config
 from bitarray import bitarray
 from pydantic import BaseModel, Field, field_serializer, field_validator
 from typing import Optional
@@ -17,16 +18,16 @@ class TaskStatus(str, Enum):
 
 class DownloadArgs(BaseModel):
     """下载任务请求参数"""
-    url: str
-    threads: Optional[int] = None
-    output: Optional[str] = None
+    url: str = ''
+    threads: int = config.server.max_threads
+    output_name: str = 'output.mp4'
     max_rounds: int = 5
+    max_retry: int = 5
     keep_cache: bool = False
-    sequential: bool = False
+    queued: bool = False
 
 class DownloadResponse(BaseModel):
     """下载任务响应"""
-    success: bool
     task_id: str
 
 class TaskInfo(BaseModel):
@@ -38,7 +39,6 @@ class TaskInfo(BaseModel):
 
 class ListTaskResponse(BaseModel):
     """任务列表响应"""
-    success: bool = False
     tasks: list[TaskInfo] = []
     total_count: int = 0
 
@@ -49,7 +49,6 @@ class MetaData(BaseModel):
     url: str = Field(frozen=True)
     base_url: str = ''
 
-    output_name: str = 'video.mp4'
     state: TaskStatus = TaskStatus.PENDING
     created_at: datetime = Field(default_factory=datetime.now)
     downloaded_mask: bitarray = Field(default_factory=bitarray)
@@ -83,7 +82,6 @@ class CacheInfo(BaseModel):
 
 class ListCacheResponse(BaseModel):
     """缓存列表响应"""
-    success: bool
     caches: list[CacheInfo]
     total_count: int
 

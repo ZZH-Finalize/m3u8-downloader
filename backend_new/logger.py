@@ -38,7 +38,7 @@ def setup_logger(config: ServerConfig) -> logging.Logger:
     if logger.handlers:
         return logger
 
-    logger.setLevel(log_level)
+    logger.setLevel(logging.DEBUG)
     logger.propagate = False
 
     # 创建日志目录

@@ -24,15 +24,18 @@ async def merge_segments(task: DownloadTask):
         f.write(line)
     f.close()
 
+    logger.debug(f'[{task.id}] 使用临时文件: {f.name}')
+
     cmd = ['ffmpeg', '-y',
             '-f', 'concat',
             '-safe', '0',
             '-i', f.name,
             '-c', 'copy',
             # '-bsf:a', 'aac_adtstoasc',
-            config.server.output_dir / task.metadata.output_name
+            config.server.output_dir / task.output_name
         ]
     try:
+        logger.debug(f'[{task.id}] 启动进程: {cmd}')
         process = await asyncio.create_subprocess_exec(
             *cmd,
             stdout=asyncio.subprocess.PIPE,
