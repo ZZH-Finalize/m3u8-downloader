@@ -178,6 +178,43 @@ body {
   box-shadow: 0 2px 8px rgba(102, 126, 234, 0.25);
 }
 
+/* 任务卡片操作按钮 */
+.task-actions {
+  display: flex;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.task-action-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 4px;
+  background-color: #f0f0f0;
+  cursor: pointer;
+  font-size: 14px;
+  transition: all 0.2s ease;
+  padding: 0;
+}
+
+.task-action-btn:hover {
+  background-color: #e0e0e0;
+  transform: scale(1.05);
+}
+
+.task-action-btn.delete-btn:hover {
+  background-color: #dc3545;
+  color: #fff;
+}
+
+.task-action-btn.action-btn:hover {
+  background-color: #667eea;
+  color: #fff;
+}
+
 /* 进度条平滑过渡 */
 .progress-bar {
   height: 100%;
@@ -190,8 +227,14 @@ body {
 .task-header {
   display: flex;
   justify-content: space-between;
-  align-items: flex-start;
+  align-items: center;
   margin-bottom: 8px;
+}
+
+.task-header-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .task-id {
@@ -228,6 +271,11 @@ body {
 .task-status.merging {
   background-color: #e2d5f5;
   color: #5a3d7a;
+}
+
+.task-status.paused {
+  background-color: #e2e3e5;
+  color: #383d41;
 }
 
 .task-status.completed {
@@ -272,6 +320,11 @@ body {
   border-radius: 4px;
   /* 移除过渡效果以避免自动刷新时的视觉延迟 */
   will-change: width;
+}
+
+/* 暂停状态的灰色进度条 */
+.progress-bar.paused {
+  background: linear-gradient(90deg, #999, #aaa);
 }
 
 .progress-info {
@@ -559,6 +612,24 @@ body {
 
 .btn-danger:hover {
   background-color: #c82333;
+}
+
+.btn-warning {
+  background-color: #ffc107;
+  color: #212529;
+}
+
+.btn-warning:hover {
+  background-color: #e0a800;
+}
+
+.btn-success {
+  background-color: #28a745;
+  color: #fff;
+}
+
+.btn-success:hover {
+  background-color: #218838;
 }
 
 /* 服务器状态 */

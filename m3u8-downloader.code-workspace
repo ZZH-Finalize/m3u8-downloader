@@ -4,7 +4,9 @@
             "path": ".",
         }
     ],
-    "settings": {},
+    "settings": {
+        "editor.trimAutoWhitespace": true,
+    },
     "tasks": {
         "version": "2.0.0",
         "tasks": [
@@ -24,7 +26,7 @@
                 "problemMatcher": [],
                 "presentation": {
                     "reveal": "always",
-                    "panel": "new",
+                    "panel": "shared",
                     "focus": false
                 }
             },

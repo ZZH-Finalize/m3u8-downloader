@@ -53,9 +53,9 @@ python backend/server.py
 - `--port`: 监听端口 (默认：6900)
 - `--max-threads`: 下载并发数上限 (默认：32)。如果 API 请求传入的 threads 值大于此值，将使用此值。
 - `--log-level`: 日志级别 DEBUG|INFO|WARNING|ERROR|CRITICAL (默认：INFO)
-- `--log-dir`: 日志目录 (默认：logs)
+- `--log-dir`: 日志目录 (默认：data/logs)
 - `--debug`: 启用调试模式（等同于 --log-level DEBUG）
-- `--temp-dir`: 临时分片目录 (默认：data/temp_segments)
+- `--cache-dir`: 缓存目录 (默认：data/task_cahce)
 - `--output-dir`: 输出目录 (默认：output)
 
 示例：
@@ -95,18 +95,16 @@ Content-Type: application/json
 |------|------|------|--------|------|
 | `url` | string | 是 | - | m3u8 文件的 URL |
 | `threads` | int | 否 | `max-threads` | 下载并发数（如果大于 `max-threads`，则使用 `max-threads`） |
-| `output` | string | 否 | `"video.mp4"` | 输出文件名 |
+| `output_name` | string | 否 | `output.mp4` | 输出文件名 |
 | `max_rounds` | int | 否 | `5` | 最大下载轮次（重试次数） |
+| `max_retry` | int | 否 | `5` | 每个分片的最大重试次数 |
 | `keep_cache` | boolean | 否 | `false` | 是否保留缓存文件 |
-| `debug` | boolean | 否 | `false` | 是否启用调试日志 |
+| `queued` | boolean | 否 | `false` | 是否加入队列（排队等待执行） |
 
 **成功响应**
 ```json
 {
-    "success": true,
-    "task_id": "abc12345",
-    "status": "pending",
-    "message": "任务已提交，后台执行中"
+    "task_id": "74a993fffd15ddbe"
 }
 ```
 
@@ -127,17 +125,14 @@ curl -X POST http://127.0.0.1:6900/api/download \
   -d '{
     "url": "https://example.com/video.m3u8",
     "threads": 8,
-    "output": "my_video.mp4"
+    "output_name": "my_video.mp4"
   }'
 ```
 
 返回：
 ```json
 {
-    "success": true,
-    "task_id": "abc12345",
-    "status": "pending",
-    "message": "任务已提交，后台执行中"
+    "task_id": "abc12345"
 }
 ```
 
@@ -181,6 +176,9 @@ services:
       # 日志配置
       - LOG_LEVEL=INFO
       - DEBUG=false
+      - LOG_DIR=/data/logs
+      - CACHE_DIR=/data/task_cache
+      - OUTPUT_DIR=/output
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:6900/health')"]
@@ -218,7 +216,7 @@ Docker 容器支持以下环境变量：
 | `LOG_LEVEL` | `INFO` | 日志级别 (DEBUG/INFO/WARNING/ERROR/CRITICAL) |
 | `LOG_DIR` | `/data/logs` | 日志目录 |
 | `DEBUG` | `false` | 启用调试模式 |
-| `TEMP_DIR` | `/data/temp_segments` | 临时分片目录 |
+| `CACHE_DIR` | `/data/task_cache` | 缓存目录（存放临时分片和任务缓存） |
 | `OUTPUT_DIR` | `/output` | 输出目录 |
 
 **注意**：Docker 镜像已内置 ffmpeg，无需额外配置。
@@ -228,7 +226,7 @@ Docker 容器支持以下环境变量：
 | 容器路径 | 宿主机路径 | 说明 |
 |----------|------------|------|
 | `/output` | `./output` | 下载完成的视频文件 |
-| `/data` | `./data` | 日志 (`/data/logs`) 和临时分片 (`/data/temp_segments`) |
+| `/data` | `./data` | 日志 (`/data/logs`) 和缓存 (`/data/task_cache`) |
 
 ### Python 原生部署
 
@@ -249,9 +247,9 @@ python backend/server.py
 - `--port`: 监听端口 (默认：6900)
 - `--max-threads`: 下载并发数上限 (默认：32)。如果 API 请求传入的 threads 值大于此值，将使用此值。
 - `--log-level`: 日志级别 DEBUG|INFO|WARNING|ERROR|CRITICAL (默认：INFO)
-- `--log-dir`: 日志目录 (默认：logs)
+- `--log-dir`: 日志目录 (默认：data/logs)
 - `--debug`: 启用调试模式（等同于 --log-level DEBUG）
-- `--temp-dir`: 临时分片目录 (默认：data/temp_segments)
+- `--cache-dir`: 缓存目录 (默认：data/task_cahce)
 - `--output-dir`: 输出目录 (默认：output)
 
 示例：

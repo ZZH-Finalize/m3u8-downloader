@@ -13,7 +13,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     LOG_LEVEL=INFO \
     LOG_DIR=/data/logs \
     DEBUG=false \
-    TEMP_DIR=/data/temp_segments \
+    CACHE_DIR=/data/task_cache \
     OUTPUT_DIR=/output
 
 # 安装 ffmpeg（Alpine 的 apk 包管理更精简）

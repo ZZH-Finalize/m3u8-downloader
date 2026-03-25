@@ -36,6 +36,9 @@ services:
       - MAX_THREADS=32
       - LOG_LEVEL=INFO
       - DEBUG=false
+      - LOG_DIR=/data/logs
+      - CACHE_DIR=/data/task_cache
+      - OUTPUT_DIR=/output
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:6900/health')"]
@@ -67,8 +70,13 @@ docker run -d \
   -v $(pwd)/output:/output \
   -v $(pwd)/data:/data \
   -e SERVER_HOST=0.0.0.0 \
+  -e SERVER_PORT=6900 \
   -e MAX_THREADS=32 \
   -e LOG_LEVEL=INFO \
+  -e LOG_DIR=/data/logs \
+  -e DEBUG=false \
+  -e CACHE_DIR=/data/task_cache \
+  -e OUTPUT_DIR=/output \
   --restart unless-stopped \
   zzhfinalize/m3u8-download-server:latest
 ```
@@ -77,13 +85,13 @@ docker run -d \
 
 | 变量名 | 默认值 | 说明 |
 |--------|--------|------|
-| `SERVER_HOST` | `0.0.0.0` | 监听地址 IP |
+| `SERVER_HOST` | `127.0.0.1` | 监听地址 IP |
 | `SERVER_PORT` | `6900` | 监听端口 |
 | `MAX_THREADS` | `32` | 下载并发数上限。如果 API 请求传入的 threads 值大于此值，将使用此值。 |
 | `LOG_LEVEL` | `INFO` | 日志级别 (DEBUG/INFO/WARNING/ERROR/CRITICAL) |
 | `LOG_DIR` | `/data/logs` | 日志目录 |
-| `DEBUG` | `false` | 启用调试模式 |
-| `TEMP_DIR` | `/data/temp_segments` | 临时分片目录 |
+| `DEBUG` | `false` | 启用调试模式（启用后日志级别自动设为 DEBUG） |
+| `CACHE_DIR` | `/data/task_cache` | 缓存目录（存放临时分片和任务缓存） |
 | `OUTPUT_DIR` | `/output` | 输出目录 |
 
 ## 目录挂载说明
@@ -91,7 +99,7 @@ docker run -d \
 | 容器路径 | 宿主机路径 | 说明 |
 |----------|------------|------|
 | `/output` | `./output` | 下载完成的视频文件 |
-| `/data` | `./data` | 日志 (`/data/logs`) 和临时分片 (`/data/temp_segments`) |
+| `/data` | `./data` | 日志 (`/data/logs`) 和缓存 (`/data/task_cache`) |
 
 ### 使用 Edge 插件
 
@@ -113,17 +121,14 @@ curl -X POST http://localhost:6900/api/download \
   -d '{
     "url": "https://example.com/video.m3u8",
     "threads": 8,
-    "output": "my_video.mp4"
+    "output_name": "my_video.mp4"
   }'
 ```
 
 **成功响应**
 ```json
 {
-    "success": true,
-    "task_id": "abc12345",
-    "status": "pending",
-    "message": "任务已提交，后台执行中"
+    "task_id": "74a993fffd15ddbe"
 }
 ```
 
@@ -146,10 +151,11 @@ TASK_ID=$(curl -s -X POST http://localhost:6900/api/download \
 
 # 轮询查询进度
 while true; do
-  STATUS=$(curl -s http://localhost:6900/api/tasks/$TASK_ID | jq -r '.progress.status')
-  PROGRESS=$(curl -s http://localhost:6900/api/tasks/$TASK_ID | jq -r '.progress.progress_percent')
-  echo "进度：$PROGRESS% 状态：$STATUS"
-  [ "$STATUS" = "completed" ] && break
+  STATE=$(curl -s http://localhost:6900/api/tasks/$TASK_ID | jq -r '.state')
+  DOWNLOADED=$(curl -s http://localhost:6900/api/tasks/$TASK_ID | jq -r '.segments_downloaded')
+  TOTAL=$(curl -s http://localhost:6900/api/tasks/$TASK_ID | jq -r '.total_segments')
+  echo "进度：$DOWNLOADED/$TOTAL 状态：$STATE"
+  [ "$STATE" = "completed" ] && break
   sleep 2
 done
 ```

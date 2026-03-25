@@ -212,3 +212,5 @@ __marimo__/
 extension/node_modules/
 extension/dist/
 extension/.vite/
+
+test_links.txt

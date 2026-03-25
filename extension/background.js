@@ -98,17 +98,18 @@ async function createTaskViaApi(url, output) {
       body: JSON.stringify({
         url: url,
         threads: config.defaultThreads || 8,
-        output: output,
-        keep_cache: false
+        output_name: output,
+        keep_cache: false,
+        queued: false  // 右键菜单默认不使用队列
       })
     });
 
     const resultData = await response.json();
 
-    if (resultData.success) {
+    if (response.ok) {
       await showGlobalNotification(`任务已创建：${output}`, 'success');
     } else {
-      await showGlobalNotification(`创建失败：${resultData.error || '未知错误'}`, 'error');
+      await showGlobalNotification(`创建失败：${resultData.msg || '未知错误'}`, 'error');
     }
   } catch (error) {
     await showGlobalNotification(`请求失败：${error.message}`, 'error');

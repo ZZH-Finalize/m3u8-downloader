@@ -17,10 +17,6 @@
         <span class="icon">➕</span>
         <span>添加任务</span>
       </button>
-      <button id="btn-delete-task" class="toolbar-btn" title="删除任务">
-        <span class="icon">🗑️</span>
-        <span>删除任务</span>
-      </button>
       <button id="btn-cache" class="toolbar-btn" title="缓存管理">
         <span class="icon">📦</span>
         <span>缓存管理</span>
@@ -44,7 +40,7 @@
         <span class="empty-icon">📭</span>
         <p>暂无下载任务</p>
       </div>
-      <div id="loading-state" class="loading-state">
+      <div id="loading-state" class="loading-state" style="display: none;">
         <span class="loading-spinner">⏳</span>
         <p>加载中...</p>
       </div>
@@ -78,6 +74,10 @@
             <label>
               <input type="checkbox" id="task-keep-cache">
               保留分片缓存
+            </label>
+            <label>
+              <input type="checkbox" id="task-queued">
+              队列下载
             </label>
           </div>
         </form>
@@ -179,7 +179,7 @@
       </div>
       <div class="modal-footer" id="cache-detail-actions">
         <button type="button" id="close-cache-detail" class="btn btn-secondary">关闭</button>
-        <button type="button" id="btn-update-cache" class="btn btn-primary">更新缓存</button>
+        <button type="button" id="btn-redownload-cache" class="btn btn-primary">重新下载</button>
         <button type="button" id="btn-delete-cache" class="btn btn-danger">删除缓存</button>
       </div>
     </div>
@@ -199,6 +199,7 @@
       </div>
       <div class="modal-footer">
         <button type="button" id="close-task-detail" class="btn btn-secondary">关闭</button>
+        <button type="button" id="btn-action-task-detail" class="btn btn-warning">暂停任务</button>
         <button type="button" id="btn-cancel-task" class="btn btn-danger">取消任务</button>
       </div>
     </div>

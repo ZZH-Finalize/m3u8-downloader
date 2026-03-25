@@ -12,3 +12,5 @@ m3u8>=5.0.0
 
 # 同步 HTTP 客户端（备用）
 requests>=2.31.0
+
+bitarray >= 3.8.0

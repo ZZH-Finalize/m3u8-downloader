@@ -34,9 +34,9 @@ if [ "$DEBUG" = "true" ]; then
     ARGS="$ARGS --debug"
 fi
 
-# 临时分片目录
-if [ -n "$TEMP_DIR" ]; then
-    ARGS="$ARGS --temp-dir $TEMP_DIR"
+# 缓存目录
+if [ -n "$CACHE_DIR" ]; then
+    ARGS="$ARGS --cache-dir $CACHE_DIR"
 fi
 
 # 输出目录
@@ -44,5 +44,5 @@ if [ -n "$OUTPUT_DIR" ]; then
     ARGS="$ARGS --output-dir $OUTPUT_DIR"
 fi
 
-# 执行命令
-exec $@ $ARGS
+# 执行命令（使用引号确保参数正确传递）
+exec "$@" $ARGS
