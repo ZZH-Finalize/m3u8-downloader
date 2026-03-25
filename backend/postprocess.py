@@ -55,6 +55,7 @@ async def merge_segments(task: DownloadTask):
         logger.info(f'[{task.id}] ffmpeg 执行完成')
     except Exception as e:
         logger.error(f'[{task.id}] ffmpeg 执行异常：{e}')
+        raise
     finally:
         logger.debug(f'[{task.id}] 删除临时文件')
         os.remove(f.name)

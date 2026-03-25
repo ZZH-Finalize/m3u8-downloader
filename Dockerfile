@@ -5,21 +5,25 @@
 # ==============================================================================
 FROM alpine:3.19 AS ffmpeg-builder
 
-ENV FFMPEG_VERSION=6.1 \
+ENV FFMPEG_VERSION=6.1.4 \
     PREFIX=/ffmpeg
 
-RUN apk add --no-cache --virtual .build-deps \
+RUN echo "http://dl-cdn.alpinelinux.org/alpine/edge/community" >> /etc/apk/repositories \
+    && apk update\
+    && apk add --no-cache \
     build-base \
     pkgconf \
     zlib-dev \
     nasm \
     wget \
+    x264-dev x265-dev aom-dev \
     && wget --no-check-certificate https://ffmpeg.org/releases/ffmpeg-${FFMPEG_VERSION}.tar.gz \
-    && tar -xzf ffmpeg-${FFMPEG_VERSION}.tar.gz \
-    && cd ffmpeg-${FFMPEG_VERSION} \
+    && tar -xzf ffmpeg-${FFMPEG_VERSION}.tar.gz
+
+RUN cd ffmpeg-${FFMPEG_VERSION} \
     && ./configure \
     --prefix=${PREFIX} \
-    --enable-static \
+    --disable-everything \
     --disable-shared \
     --disable-doc \
     --disable-ffplay \
@@ -28,43 +32,30 @@ RUN apk add --no-cache --virtual .build-deps \
     --disable-swresample \
     --disable-postproc \
     --disable-filters \
-    --disable-encoders \
-    --disable-decoders \
-    --disable-parsers \
-    --enable-demuxer=mpegts \
-    --enable-demuxer=hls \
-    --enable-demuxer=aac \
-    --enable-demuxer=ac3 \
-    --enable-demuxer=eac3 \
-    --enable-demuxer=flv \
-    --enable-demuxer=matroska \
-    --enable-demuxer=mov \
-    --enable-demuxer=mpegps \
-    --enable-demuxer=mpegtsraw \
-    --enable-demuxer=webm \
-    --enable-demuxer=ogg \
-    --enable-demuxer=wav \
-    --enable-muxer=mpegts \
-    --enable-muxer=matroska \
+    \
+    --enable-static \
+    --enable-small \
+    # --optimize-for-size \
+    \
+    --enable-decoders \
+    --enable-parsers \
+    --enable-demuxers \
+    \
     --enable-muxer=mp4 \
-    --enable-muxer=ogg \
-    --enable-parser=aac \
-    --enable-parser=h264 \
-    --enable-parser=hevc \
-    --enable-parser=vp9 \
+    --enable-libx264 \
+    --enable-libx265 \
+    --enable-libaom \
+    --enable-gpl \
+    --enable-encoder=aac \
+    \
     --enable-bsf=aac_adtstoasc \
     --enable-bsf=h264_mp4toannexb \
     --enable-bsf=hevc_mp4toannexb \
     --enable-protocol=file \
-    --enable-protocol=http \
-    --enable-protocol=https \
-    --enable-protocol=tcp \
-    --enable-protocol=udp \
     --extra-libs="-lpthread -lm -lz" \
     && make -j$(nproc) \
     && make install \
     && strip ${PREFIX}/bin/ffmpeg \
-    && apk del .build-deps \
     && rm -rf /ffmpeg-${FFMPEG_VERSION}* /build
 
 # ==============================================================================
@@ -72,12 +63,13 @@ RUN apk add --no-cache --virtual .build-deps \
 # ==============================================================================
 FROM python:3.12-alpine
 
-RUN apk add --no-cache \
-    libgcc \
-    libstdc++ \
-    zlib
+RUN apk add --no-cache libgcc libstdc++ zlib x264 x265-libs aom \
+    && mkdir -p /app /data/logs /output /data/temp_segments \
+    && pip install --no-cache-dir quart quart-cors aiohttp m3u8 bitarray pydantic
 
 COPY --from=ffmpeg-builder /ffmpeg/bin/ffmpeg /usr/local/bin/ffmpeg
+COPY backend/ /app/
+COPY docker-entrypoint.sh /docker-entrypoint.sh
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -93,23 +85,12 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     CACHE_DIR=/data/task_cache \
     OUTPUT_DIR=/output
 
-RUN mkdir -p /app /data/logs /output /data/temp_segments
-
-WORKDIR /app
-
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-
-COPY backend/ ./
-COPY docker-entrypoint.sh /docker-entrypoint.sh
-RUN chmod +x /docker-entrypoint.sh
+WORKDIR /
 
 EXPOSE 6900
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:6900/health')" || exit 1
-
-WORKDIR /
 
 ENTRYPOINT ["sh", "/docker-entrypoint.sh"]
 CMD ["python", "/app/server.py"]
