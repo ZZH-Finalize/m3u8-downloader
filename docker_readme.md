@@ -121,7 +121,8 @@ curl -X POST http://localhost:6900/api/download \
   -d '{
     "url": "https://example.com/video.m3u8",
     "threads": 8,
-    "output_name": "my_video.mp4"
+    "output_name": "my_video.mp4",
+    "output_encoding": "copy"
   }'
 ```
 

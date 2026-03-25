@@ -3,6 +3,7 @@ const DEFAULT_CONFIG = {
   host: '127.0.0.1',
   port: '6900',
   defaultThreads: 8,
+  defaultEncoding: 'copy',
   autoRefresh: 2000
 };
 
@@ -89,6 +90,7 @@ function applyConfigToUI() {
   const protocol = config.protocol || 'http';
   document.getElementById('setting-address').value = `${protocol}://${config.host}:${config.port}`;
   document.getElementById('setting-default-threads').value = config.defaultThreads;
+  document.getElementById('setting-default-encoding').value = config.defaultEncoding || 'copy';
   document.getElementById('setting-auto-refresh').value = String(config.autoRefresh);
 }
 
@@ -190,6 +192,9 @@ function setupEventListeners() {
   document.getElementById('setting-default-threads').addEventListener('change', (e) => {
     config.defaultThreads = parseInt(e.target.value) || 8;
   });
+  document.getElementById('setting-default-encoding').addEventListener('change', (e) => {
+    config.defaultEncoding = e.target.value || 'copy';
+  });
   document.getElementById('setting-auto-refresh').addEventListener('change', (e) => {
     config.autoRefresh = parseInt(e.target.value) || 0;
     restartAutoRefresh();
@@ -209,7 +214,7 @@ function setupEventListeners() {
   // 监听来自 background 的消息
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message.action === 'createDownloadTask') {
-      handleQuickDownload(message.url, message.output);
+      handleQuickDownload(message.url, message.output, message.queued || false);
       sendResponse({ success: true });
     } else if (message.action === 'showNotification') {
       showToast(message.message, message.type);
@@ -230,6 +235,9 @@ function showAddTaskModal() {
   document.getElementById('task-url').value = '';
   document.getElementById('task-threads').value = config.defaultThreads;
   document.getElementById('task-output').value = 'video.mp4';
+  document.getElementById('task-output-encoding').value = config.defaultEncoding || 'copy';
+  document.getElementById('task-keep-cache').checked = false;
+  document.getElementById('task-queued').checked = false;
 
   elements.addTaskModal.style.display = 'flex';
   document.getElementById('task-url').focus();
@@ -259,6 +267,7 @@ async function handleAddTask(e) {
     url: document.getElementById('task-url').value.trim(),
     threads: parseInt(document.getElementById('task-threads').value) || config.defaultThreads,
     output_name: document.getElementById('task-output').value.trim() || 'video.mp4',
+    output_encoding: document.getElementById('task-output-encoding').value,
     keep_cache: document.getElementById('task-keep-cache').checked,
     queued: document.getElementById('task-queued').checked
   };
@@ -292,7 +301,7 @@ async function handleAddTask(e) {
 }
 
 // 快速下载（用于右键菜单）
-async function handleQuickDownload(url, output) {
+async function handleQuickDownload(url, output, queued = false) {
   if (!url) {
     showToast('无效的链接', 'error');
     return;
@@ -302,8 +311,9 @@ async function handleQuickDownload(url, output) {
     url: url,
     threads: config.defaultThreads || 8,
     output_name: output || 'video.mp4',
+    output_encoding: config.defaultEncoding || 'copy',
     keep_cache: false,
-    queued: false  // 右键菜单默认不使用队列
+    queued: queued
   };
 
   try {
@@ -339,6 +349,7 @@ async function handleSaveSettings(e) {
   config.host = parsed.host;
   config.port = parsed.port;
   config.defaultThreads = parseInt(document.getElementById('setting-default-threads').value) || 8;
+  config.defaultEncoding = document.getElementById('setting-default-encoding').value || 'copy';
   config.autoRefresh = parseInt(document.getElementById('setting-auto-refresh').value) || 0;
 
   await saveConfig();

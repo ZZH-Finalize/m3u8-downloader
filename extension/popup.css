@@ -560,6 +560,31 @@ body {
   margin-bottom: 16px;
 }
 
+/* 复选框行样式 */
+.checkbox-row {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  font-weight: 400;
+  font-size: 13px;
+  color: #555;
+  flex: 1;
+}
+
+.checkbox-label input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
 .checkbox-group label {
   display: flex;
   align-items: center;

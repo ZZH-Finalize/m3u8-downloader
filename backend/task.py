@@ -14,13 +14,16 @@ class DownloadTask:
         task_id = hash_func(param.url.encode('utf-8')).hexdigest()[:16]
         return DownloadTask(task_id, **param.model_dump(exclude={'queued',}))
 
-    def __init__(self, id: str, url: str, threads: int, output_name: str, 
-                 max_rounds: int, max_retry: int, keep_cache: bool) -> None:
+    def __init__(self, id: str, url: str, threads: int, output_name: str,
+                 output_encoding: OutputEncoding, max_rounds: int, 
+                 max_retry: int, keep_cache: bool) -> None:
         self.id = id
         self.metadata = MetaData(url=url, base_url='')
 
+        self.state = TaskStatus.PENDING
         self.threads = threads
         self.output_name = output_name
+        self.output_encoding = output_encoding
         self.max_rounds = max_rounds
         self.max_retry = max_retry
         self.keep_cache = keep_cache
@@ -48,14 +51,6 @@ class DownloadTask:
     @property
     def url(self):
         return self.metadata.url
-
-    @property
-    def state(self):
-        return self.metadata.state
-
-    @state.setter
-    def state(self, state):
-        self.metadata.state = state
 
     def pause(self):
         if self.state not in (TaskStatus.PENDING, TaskStatus.PARSING, TaskStatus.DOWNLOADING):

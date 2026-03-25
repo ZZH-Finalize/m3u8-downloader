@@ -5,6 +5,11 @@ chrome.runtime.onInstalled.addListener(() => {
     title: '下载 m3u8',
     contexts: ['link', 'audio', 'video']
   });
+  chrome.contextMenus.create({
+    id: 'downloadM3u8Queued',
+    title: '下载 m3u8（队列模式）',
+    contexts: ['link', 'audio', 'video']
+  });
 });
 
 // 从 URL 提取文件名（与 popup.js 保持一致）
@@ -40,8 +45,9 @@ function extractFilenameFromUrl(url) {
 
 // 处理右键菜单点击事件
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
-  if (info.menuItemId === 'downloadM3u8') {
+  if (info.menuItemId === 'downloadM3u8' || info.menuItemId === 'downloadM3u8Queued') {
     let url = null;
+    const useQueue = info.menuItemId === 'downloadM3u8Queued';
 
     // 根据点击的上下文获取 URL
     if (info.linkUrl) {
@@ -66,17 +72,18 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
       await chrome.tabs.sendMessage(tab.id, {
         action: 'createDownloadTask',
         url: url,
-        output: output
+        output: output,
+        queued: useQueue
       });
     } catch (error) {
       // 如果 popup 未打开，通过 background 直接调用 API
-      await createTaskViaApi(url, output);
+      await createTaskViaApi(url, output, useQueue);
     }
   }
 });
 
 // 通过 API 创建下载任务
-async function createTaskViaApi(url, output) {
+async function createTaskViaApi(url, output, queued = false) {
   try {
     // 从存储中获取配置
     const result = await chrome.storage.sync.get(['m3u8DownloaderConfig']);
@@ -84,7 +91,8 @@ async function createTaskViaApi(url, output) {
       host: '127.0.0.1',
       port: '6900',
       protocol: 'http',
-      defaultThreads: 8
+      defaultThreads: 8,
+      defaultEncoding: 'copy'
     };
 
     const protocol = config.protocol || 'http';
@@ -99,8 +107,9 @@ async function createTaskViaApi(url, output) {
         url: url,
         threads: config.defaultThreads || 8,
         output_name: output,
+        output_encoding: config.defaultEncoding || 'copy',
         keep_cache: false,
-        queued: false  // 右键菜单默认不使用队列
+        queued: queued
       })
     });
 

@@ -96,6 +96,7 @@ Content-Type: application/json
 | `url` | string | 是 | - | m3u8 文件的 URL |
 | `threads` | int | 否 | `max-threads` | 下载并发数（如果大于 `max-threads`，则使用 `max-threads`） |
 | `output_name` | string | 否 | `output.mp4` | 输出文件名 |
+| `output_encoding` | string | 否 | `copy` | 视频编码格式（可选值：`copy`/`x264`/`x265`/`AV1`） |
 | `max_rounds` | int | 否 | `5` | 最大下载轮次（重试次数） |
 | `max_retry` | int | 否 | `5` | 每个分片的最大重试次数 |
 | `keep_cache` | boolean | 否 | `false` | 是否保留缓存文件 |
@@ -125,7 +126,8 @@ curl -X POST http://127.0.0.1:6900/api/download \
   -d '{
     "url": "https://example.com/video.m3u8",
     "threads": 8,
-    "output_name": "my_video.mp4"
+    "output_name": "my_video.mp4",
+    "output_encoding": "copy"
   }'
 ```
 

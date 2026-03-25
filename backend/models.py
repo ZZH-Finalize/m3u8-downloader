@@ -6,6 +6,11 @@ from pydantic import BaseModel, Field, field_serializer, field_validator
 from enum import Enum
 from datetime import datetime
 
+class OutputEncoding(str, Enum):
+    COPY = "copy"
+    X264 = "x264"
+    X265 = "x265"
+    AV1 = "AV1"
 
 class TaskStatus(str, Enum):
     """任务状态枚举"""
@@ -22,6 +27,7 @@ class DownloadArgs(BaseModel):
     url: str
     threads: int = config.server.max_threads
     output_name: str = 'output.mp4'
+    output_encoding: OutputEncoding = OutputEncoding.COPY
     max_rounds: int = 5
     max_retry: int = 5
     keep_cache: bool = False
@@ -34,7 +40,6 @@ class MetaData(BaseModel):
     url: str = Field(frozen=True)
     base_url: str = ''
 
-    state: TaskStatus = TaskStatus.PENDING
     created_at: datetime = Field(default_factory=datetime.now)
     segments_num: int = 0
     downloaded_mask: bitarray = Field(default_factory=bitarray)

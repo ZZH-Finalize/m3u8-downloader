@@ -1,12 +1,19 @@
 import asyncio, os, shutil
 import config
 
-from models import TaskStatus
+from models import TaskStatus, OutputEncoding
 from task import DownloadTask
 from logger import get_logger
 from tempfile import NamedTemporaryFile
 
 logger = get_logger(__name__)
+
+encoder_mapping = {
+    OutputEncoding.COPY: 'copy',
+    OutputEncoding.X264: 'libx264',
+    OutputEncoding.X265: 'libx265',
+    OutputEncoding.AV1: 'libaom',
+}
 
 async def clear_segments(task: DownloadTask):
     await asyncio.to_thread(shutil.rmtree, task.segments_dir)
@@ -34,7 +41,8 @@ async def merge_segments(task: DownloadTask):
             '-f', 'concat',
             '-safe', '0',
             '-i', f.name,
-            '-c', 'copy',
+            '-c:a', 'copy',
+            '-c:v', encoder_mapping[task.output_encoding],
             # '-bsf:a', 'aac_adtstoasc',
             config.server.output_dir / task.output_name
         ]

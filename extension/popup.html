@@ -70,15 +70,24 @@
               <input type="text" id="task-output" value="video.mp4">
             </div>
           </div>
-          <div class="form-group checkbox-group">
-            <label>
+          <div class="form-row checkbox-row">
+            <label class="checkbox-label">
               <input type="checkbox" id="task-keep-cache">
               保留分片缓存
             </label>
-            <label>
+            <label class="checkbox-label">
               <input type="checkbox" id="task-queued">
               队列下载
             </label>
+          </div>
+          <div class="form-group">
+            <label for="task-output-encoding">输出编码</label>
+            <select id="task-output-encoding">
+              <option value="copy">copy（复制，不重新编码）</option>
+              <option value="x264">x264（H.264）</option>
+              <option value="x265">x265（H.265/HEVC）</option>
+              <option value="AV1">AV1</option>
+            </select>
           </div>
         </form>
       </div>
@@ -105,6 +114,15 @@
           <div class="form-group">
             <label for="setting-default-threads">默认并发数</label>
             <input type="number" id="setting-default-threads" min="1" max="32">
+          </div>
+          <div class="form-group">
+            <label for="setting-default-encoding">默认输出编码</label>
+            <select id="setting-default-encoding">
+              <option value="copy">copy（复制，不重新编码）</option>
+              <option value="x264">x264（H.264）</option>
+              <option value="x265">x265（H.265/HEVC）</option>
+              <option value="AV1">AV1</option>
+            </select>
           </div>
           <div class="form-group">
             <label>自动刷新间隔</label>
