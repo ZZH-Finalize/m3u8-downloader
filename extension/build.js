@@ -13,6 +13,7 @@ const FILES_TO_COPY = [
   'popup.css',
   'popup.js',
   'background.js',
+  'utils.js',
   'icons'
 ];
 

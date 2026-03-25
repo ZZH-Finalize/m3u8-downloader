@@ -103,7 +103,6 @@ class CacheInfo(BaseModel):
     """缓存信息"""
     id: str
     url: str
-    state: TaskStatus
     created_at: datetime
     segments_num: int
 

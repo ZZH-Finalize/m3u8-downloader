@@ -381,7 +381,6 @@ GET /api/cache/list
         {
             "id": "74a993fffd15ddbe",
             "url": "https://example.com/video.m3u8",
-            "state": "downloading",
             "created_at": "2024-01-01T12:00:00.000000",
             "segments_num": 100
         }
@@ -396,7 +395,6 @@ GET /api/cache/list
 | `caches` | array | 缓存列表 |
 | `caches[].id` | string | 缓存 ID（URL 的 MD5 哈希前 16 位） |
 | `caches[].url` | string | 原始 m3u8 URL |
-| `caches[].state` | string | 任务状态 (`pending`/`parsing`/`downloading`/`merging`/`paused`/`completed`/`failed`) |
 | `caches[].created_at` | string | 创建时间（ISO 8601） |
 | `caches[].segments_num` | int | 分片总数 |
 | `total_count` | int | 缓存总数 |

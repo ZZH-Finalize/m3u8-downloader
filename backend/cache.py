@@ -34,7 +34,6 @@ async def list() -> ListCacheResponse:
             detail = MetaData.model_validate_json(await f.read())
             caches.append(CacheInfo(id=cache_id,
                                     url=detail.url,
-                                    state=detail.state,
                                     created_at=detail.created_at,
                                     segments_num=detail.segments_num))
 
