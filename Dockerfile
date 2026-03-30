@@ -1,23 +1,19 @@
 # m3u8-downloader 后端服务 Docker 镜像（两阶段构建优化版）
 
-# ==============================================================================
-# 阶段一：编译最小化 ffmpeg（仅 HLS 合并，-c copy 模式）
-# ==============================================================================
-FROM alpine:3.19 AS ffmpeg-builder
+FROM alpine:3.23 AS ffmpeg-builder
 
-ENV FFMPEG_VERSION=6.1.4 \
+RUN apk update
+
+RUN apk add --no-cache build-base
+RUN apk add --no-cache pkgconf zlib-dev nasm wget
+
+RUN apk add --no-cache x264-dev x265-dev svt-av1-dev
+# RUN apk add --no-cache libva-dev libdrm-dev
+
+ENV FFMPEG_VERSION=8.1 \
     PREFIX=/ffmpeg
 
-RUN echo "http://dl-cdn.alpinelinux.org/alpine/edge/community" >> /etc/apk/repositories \
-    && apk update\
-    && apk add --no-cache \
-    build-base \
-    pkgconf \
-    zlib-dev \
-    nasm \
-    wget \
-    x264-dev x265-dev aom-dev \
-    && wget --no-check-certificate https://ffmpeg.org/releases/ffmpeg-${FFMPEG_VERSION}.tar.gz \
+RUN wget --no-check-certificate https://ffmpeg.org/releases/ffmpeg-${FFMPEG_VERSION}.tar.gz \
     && tar -xzf ffmpeg-${FFMPEG_VERSION}.tar.gz
 
 RUN cd ffmpeg-${FFMPEG_VERSION} \
@@ -30,7 +26,7 @@ RUN cd ffmpeg-${FFMPEG_VERSION} \
     --disable-ffprobe \
     --disable-avdevice \
     --disable-swresample \
-    --disable-postproc \
+    # --disable-postproc \
     --disable-filters \
     \
     --enable-static \
@@ -41,12 +37,44 @@ RUN cd ffmpeg-${FFMPEG_VERSION} \
     --enable-parsers \
     --enable-demuxers \
     \
-    --enable-muxer=mp4 \
-    --enable-libx264 \
-    --enable-libx265 \
-    --enable-libaom \
     --enable-gpl \
+    --enable-nonfree \
+    \
+    --enable-muxer=mp4 \
+    \
     --enable-encoder=aac \
+    \
+    # 硬件加速库
+    # --enable-libdrm \
+    \
+    # 软件编码器
+    # --enable-libx264 \
+    # --enable-encoder=libx264 \
+    \
+    # --enable-libx265 \
+    # --enable-encoder=libx265 \
+    \
+    # --enable-libsvtav1 \
+    # --enable-encoder=libsvtav1 \
+    \
+    # Nvdia 硬件编码器
+    # --enable-ffnvcodec \
+    # --enable-nvenc \
+    # --enable-encoder=h264_nvenc \
+    # --enable-encoder=hevc_nvenc \
+    # --enable-encoder=av1_nvenc \
+    \
+    # Intel 硬件编码器
+    # --enable-qsv \
+    # --enable-encoder=h264_qsv \
+    # --enable-encoder=hevc_qsv \
+    # --enable-encoder=av1_qsv \
+    \
+    # AMD/Intel 硬件编码器
+    # --enable-vaapi \
+    # --enable-encoder=h264_vaapi \
+    # --enable-encoder=hevc_vaapi \
+    # --enable-encoder=av1_vaapi \
     \
     --enable-bsf=aac_adtstoasc \
     --enable-bsf=h264_mp4toannexb \
@@ -58,18 +86,27 @@ RUN cd ffmpeg-${FFMPEG_VERSION} \
     && strip ${PREFIX}/bin/ffmpeg \
     && rm -rf /ffmpeg-${FFMPEG_VERSION}* /build
 
+# RUN cat /etc/alpine-release && sleep 10s
+# RUN /ffmpeg/bin/ffmpeg
+
 # ==============================================================================
 # 阶段二：Python 运行时 + 编译好的 ffmpeg
 # ==============================================================================
 FROM python:3.12-alpine
 
-RUN apk add --no-cache libgcc libstdc++ zlib x264 x265-libs aom \
+RUN apk update \
+    && apk add --no-cache \
+    # x264-libs x265-libs libSvtAv1Enc \
     && mkdir -p /app /data/logs /output /data/temp_segments \
     && pip install --no-cache-dir quart quart-cors aiohttp m3u8 bitarray pydantic
 
 COPY --from=ffmpeg-builder /ffmpeg/bin/ffmpeg /usr/local/bin/ffmpeg
 COPY backend/ /app/
 COPY docker-entrypoint.sh /docker-entrypoint.sh
+
+# RUN cat /etc/alpine-release && sleep 10s
+
+# RUN ffmpeg -v
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \

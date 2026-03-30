@@ -15,14 +15,15 @@ class DownloadTask:
         return DownloadTask(task_id, **param.model_dump(exclude={'queued',}))
 
     def __init__(self, id: str, url: str, threads: int, output_name: str,
-                 output_encoding: OutputEncoding, max_rounds: int, 
-                 max_retry: int, keep_cache: bool) -> None:
+                 encoder: Encoder, output_encoding: OutputEncoding, 
+                 max_rounds: int, max_retry: int, keep_cache: bool) -> None:
         self.id = id
         self.metadata = MetaData(url=url, base_url='')
 
         self.state = TaskStatus.PENDING
         self.threads = threads
         self.output_name = output_name
+        self.encoder = encoder
         self.output_encoding = output_encoding
         self.max_rounds = max_rounds
         self.max_retry = max_retry
@@ -196,7 +197,7 @@ async def add(param: DownloadArgs) -> DownloadResponse:
 
         task = DownloadTask(task_id, **param.model_dump(exclude={'queued',}))
 
-    logger.debug(f'任务信息:\n{param.model_dump_json(indent=4)}')
+    logger.info(f'任务信息:\n{param}')
 
     if param.queued:
         logger.info(f'添加 [{task.id}] 到队列')

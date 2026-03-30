@@ -8,28 +8,49 @@
 
 ```
 m3u8-downloader/
-├── backend/                # 后端服务
-│   ├── server.py          # Quart 异步 API 服务
-│   ├── task_manager.py    # 任务管理器（后台任务管理）
-│   ├── models.py          # 数据模型
-│   ├── logger.py          # 日志模块
-│   ├── cache_manager.py   # 缓存管理
-│   ├── parser.py          # 异步 m3u8 解析
-│   ├── downloader.py      # 异步分片下载
-│   └── postprocessor.py   # 异步后处理 (ffmpeg 合并)
+├── backend/                    # 后端服务
+│   ├── server.py              # Quart 异步 API 服务
+│   ├── task.py                # 任务管理器（后台任务管理）
+│   ├── models.py              # 数据模型
+│   ├── logger.py              # 日志模块
+│   ├── cache.py               # 缓存管理
+│   ├── config.py              # 配置管理
+│   ├── parser.py              # 异步 m3u8 解析
+│   ├── downloader.py          # 异步分片下载
+│   └── postprocess.py         # 异步后处理 (ffmpeg 合并)
 │
-├── extension/              # Edge 浏览器插件（官方前端）
-│   ├── manifest.json      # 插件配置文件
-│   ├── popup.html         # 插件页面
-│   ├── popup.js           # 逻辑脚本
-│   └── icons/             # 图标文件
+├── extension/                  # Edge 浏览器插件（官方前端）
+│   ├── manifest.json          # 插件配置文件
+│   ├── popup.html             # 插件弹出页面
+│   ├── popup.js               # 弹出页面逻辑
+│   ├── popup.css              # 弹出页面样式
+│   ├── background.js          # 后台脚本
+│   ├── utils.js               # 工具函数
+│   ├── build.js               # 构建脚本
+│   ├── generate-icons.js      # 图标生成脚本
+│   ├── package.json           # Node.js 依赖配置
+│   ├── css/                   # 样式文件目录
+│   ├── js/                    # JavaScript 脚本目录
+│   └── icons/                 # 图标文件
 │
-├── tools/                  # 工具目录
-│   └── test_cli.py        # CLI 测试工具（支持下载、任务管理、缓存管理）
+├── tools/                      # 工具目录
+│   ├── __init__.py            # 包初始化文件
+│   └── test_cli.py            # CLI 测试工具（支持下载、任务管理、缓存管理）
 │
-├── docker/                 # Docker 相关配置
-├── requirements.txt       # 依赖列表
-└── API.md                 # 完整 API 文档
+├── build/                      # 构建输出目录
+├── data/                       # 数据目录（日志、缓存）
+├── output/                     # 下载输出目录
+├── imgs/                       # 文档图片资源
+│
+├── .dockerignore              # Docker 忽略文件
+├── .gitignore                 # Git 忽略文件
+├── Dockerfile                 # Docker 镜像构建文件
+├── docker-entrypoint.sh       # Docker 入口脚本
+├── docker_readme.md           # Docker 部署说明
+├── requirements.txt           # Python 依赖列表
+├── API.md                     # 完整 API 文档
+├── LICENSE                    # 开源许可证
+└── m3u8-downloader.code-workspace  # VS Code 工作区配置
 ```
 
 ## 快速开始
@@ -96,7 +117,8 @@ Content-Type: application/json
 | `url` | string | 是 | - | m3u8 文件的 URL |
 | `threads` | int | 否 | `max-threads` | 下载并发数（如果大于 `max-threads`，则使用 `max-threads`） |
 | `output_name` | string | 否 | `output.mp4` | 输出文件名 |
-| `output_encoding` | string | 否 | `copy` | 视频编码格式（可选值：`copy`/`x264`/`x265`/`AV1`） |
+| `encoder` | string | 否 | `software` | 编码器类型（可选值：`software`/`nvenc`/`qsv`/`amf`/`vaapi`/`mf`/`d3d12va`/`vulkan`），详见 [编码器选择指南](extension/ENCODER_GUIDE.md) |
+| `output_encoding` | string | 否 | `copy` | 视频编码格式（可选值：`copy`/`h264`/`hevc`/`av1`） |
 | `max_rounds` | int | 否 | `5` | 最大下载轮次（重试次数） |
 | `max_retry` | int | 否 | `5` | 每个分片的最大重试次数 |
 | `keep_cache` | boolean | 否 | `false` | 是否保留缓存文件 |
@@ -150,11 +172,7 @@ curl -X POST http://127.0.0.1:6900/api/download \
 
 Docker 镜像地址：[https://hub.docker.com/r/zzhfinalize/m3u8-download-server](https://hub.docker.com/r/zzhfinalize/m3u8-download-server)
 
-### Docker Compose 部署（推荐）
-
-#### 1. 创建 docker-compose.yml 文件
-
-在项目根目录下创建 `docker-compose.yml` 文件：
+### Docker Compose 部署
 
 ```yaml
 version: '3.8'
@@ -166,44 +184,27 @@ services:
     ports:
       - "6900:6900"
     volumes:
-      # 输出目录：下载的视频文件
       - ./output:/output
-      # 数据目录：日志和临时分片
       - ./data:/data
     environment:
-      # 服务器配置
       - SERVER_HOST=0.0.0.0
       - SERVER_PORT=6900
       - MAX_THREADS=32
-      # 日志配置
       - LOG_LEVEL=INFO
       - DEBUG=false
       - LOG_DIR=/data/logs
       - CACHE_DIR=/data/task_cache
       - OUTPUT_DIR=/output
     restart: unless-stopped
+    # 硬件加速支持 (根据实际情况配置)
+    devices:
+      - /dev/dri:/dev/dri # 主要渲染设备
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:6900/health')"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 5s
-```
-
-#### 2. 启动服务
-
-```bash
-# 启动容器
-docker-compose up -d
-
-# 查看日志
-docker-compose logs -f
-
-# 停止服务
-docker-compose down
-
-# 停止并删除容器和网络
-docker-compose down -v
 ```
 
 ### 环境变量配置
@@ -222,6 +223,7 @@ Docker 容器支持以下环境变量：
 | `OUTPUT_DIR` | `/output` | 输出目录 |
 
 **注意**：Docker 镜像已内置 ffmpeg，无需额外配置。
+**注意**：Docker 镜像内的ffmpeg的硬件编码器仅支持vaapi, 如果需要其他的硬件编码器, 请自行修改Dockerfile
 
 ### 目录挂载说明
 
@@ -229,6 +231,10 @@ Docker 容器支持以下环境变量：
 |----------|------------|------|
 | `/output` | `./output` | 下载完成的视频文件 |
 | `/data` | `./data` | 日志 (`/data/logs`) 和缓存 (`/data/task_cache`) |
+
+### Docker 镜像编码器说明
+
+**重要**：Docker 镜像内的编码器组件已全部移除，使用 Docker 镜像后端时，用户只能选择 copy 作为编码方式，copy 是最常用的模式，它直接复制视频流而不重新编码。如果用户确实需要其他编码方式，可以使用原生部署直接使用宿主机上功能齐全的 ffmpeg，或者自行转码处理 Docker 合并完成的输出文件。
 
 ### Python 原生部署
 
@@ -274,11 +280,12 @@ docker inspect --format='{{.State.Health.Status}}' m3u8-downloader
 ```
 
 ## 注意事项
-
+ 
 1. Docker 镜像已内置 ffmpeg，无需额外安装
-2. 后端服务需要保持运行才能使用 Edge 插件
-3. 默认情况下，下载完成后会清理分片文件，保留元数据
-4. 完整的 API 文档请查看 [API.md](API.md)
+2. Docker 镜像内的编码器组件已全部移除，使用 Docker 镜像后端时，用户只能选择 copy 作为编码方式，copy 是最常用的模式，它直接复制视频流而不重新编码。如果用户确实需要其他编码方式，可以使用原生部署直接使用宿主机上功能齐全的 ffmpeg，或者自行转码处理 Docker 合并完成的输出文件
+3. 后端服务需要保持运行才能使用 Edge 插件
+4. 默认情况下，下载完成后会清理分片文件，保留元数据
+5. 完整的 API 文档请查看 [API.md](API.md)
 
 ## 许可证
 

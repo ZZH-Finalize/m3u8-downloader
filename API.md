@@ -150,6 +150,7 @@ Content-Type: application/json
     "url": "https://example.com/video.m3u8",
     "threads": 4,
     "output_name": "video.mp4",
+    "encoder": "software",
     "output_encoding": "copy",
     "max_rounds": 5,
     "max_retry": 5,
@@ -164,7 +165,8 @@ Content-Type: application/json
 | `url` | string | 是 | - | m3u8 文件的 URL |
 | `threads` | int | 否 | `max-threads` | 下载并发数（如果大于 `max-threads`，则使用 `max-threads`） |
 | `output_name` | string | 否 | `output.mp4` | 输出文件名 |
-| `output_encoding` | string | 否 | `copy` | 视频编码格式（可选值：`copy`/`x264`/`x265`/`AV1`） |
+| `encoder` | string | 否 | `software` | 编码器类型（可选值：`software`/`nvenc`/`qsv`/`amf`/`vaapi`/`mf`/`d3d12va`/`vulkan`）。**注意**：使用 Docker 镜像后端时，由于镜像内编码器组件已全部移除，此参数将被忽略，系统仅支持 copy 模式 |
+| `output_encoding` | string | 否 | `copy` | 视频编码格式（可选值：`copy`/`h264`/`hevc`/`av1`）。**注意**：使用 Docker 镜像后端时，由于镜像内编码器组件已全部移除，仅支持 `copy` 模式；如果用户确实需要其他编码方式，可以使用原生部署直接使用宿主机上功能齐全的 ffmpeg，或者自行转码处理 Docker 合并完成的输出文件 |
 | `max_rounds` | int | 否 | `5` | 最大下载轮次（重试次数） |
 | `max_retry` | int | 否 | `5` | 每个分片的最大重试次数 |
 | `keep_cache` | boolean | 否 | `false` | 是否保留缓存文件 |

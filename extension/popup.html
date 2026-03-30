@@ -84,9 +84,9 @@
             <label for="task-output-encoding">输出编码</label>
             <select id="task-output-encoding">
               <option value="copy">copy（复制，不重新编码）</option>
-              <option value="x264">x264（H.264）</option>
-              <option value="x265">x265（H.265/HEVC）</option>
-              <option value="AV1">AV1</option>
+              <option value="h264">h264（H.264）</option>
+              <option value="hevc">hevc（H.265/HEVC）</option>
+              <option value="av1">av1（AV1）</option>
             </select>
           </div>
         </form>
@@ -119,9 +119,22 @@
             <label for="setting-default-encoding">默认输出编码</label>
             <select id="setting-default-encoding">
               <option value="copy">copy（复制，不重新编码）</option>
-              <option value="x264">x264（H.264）</option>
-              <option value="x265">x265（H.265/HEVC）</option>
-              <option value="AV1">AV1</option>
+              <option value="h264">h264（H.264）</option>
+              <option value="hevc">hevc（H.265/HEVC）</option>
+              <option value="av1">AV1</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="setting-default-encoder">默认编码器</label>
+            <select id="setting-default-encoder">
+              <option value="software">software（软件编码）</option>
+              <option value="nvenc">nvenc（NVIDIA GPU）</option>
+              <option value="qsv">qsv（Intel Quick Sync）</option>
+              <option value="amf">amf（AMD AMF）</option>
+              <option value="vaapi">vaapi（VAAPI）</option>
+              <option value="mf">mf（Windows Media Foundation）</option>
+              <option value="d3d12va">d3d12va（Direct3D 12 Video Acceleration）</option>
+              <option value="vulkan">vulkan（跨平台）</option>
             </select>
           </div>
           <div class="form-group">

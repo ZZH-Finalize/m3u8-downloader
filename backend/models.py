@@ -8,9 +8,28 @@ from datetime import datetime
 
 class OutputEncoding(str, Enum):
     COPY = "copy"
-    X264 = "x264"
-    X265 = "x265"
-    AV1 = "AV1"
+    H264 = "h264"
+    HEVC = "hevc"
+    AV1 = "av1"
+
+class Encoder(str, Enum):
+    Software = "software"
+
+    # 厂商特定
+    NVENC = "nvenc"
+    QSV = "qsv"
+    AMF = "amf"
+
+    # Linux
+    VAAPI = "vaapi"
+
+    # Windows
+    MF = "mf"
+    D3D12VA = "d3d12va"
+
+    # 跨平台
+    VULKAN = "vulkan"
+    
 
 class TaskStatus(str, Enum):
     """任务状态枚举"""
@@ -27,6 +46,7 @@ class DownloadArgs(BaseModel):
     url: str
     threads: int = config.server.max_threads
     output_name: str = 'output.mp4'
+    encoder: Encoder = Encoder.Software
     output_encoding: OutputEncoding = OutputEncoding.COPY
     max_rounds: int = 5
     max_retry: int = 5

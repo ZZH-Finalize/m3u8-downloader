@@ -9,6 +9,7 @@ const DEFAULT_CONFIG = {
   port: '6900',
   defaultThreads: 8,
   defaultEncoding: 'copy',
+  defaultEncoder: 'software',
   autoRefresh: 2000
 };
 
@@ -96,6 +97,7 @@ function applyConfigToUI() {
   document.getElementById('setting-address').value = `${protocol}://${config.host}:${config.port}`;
   document.getElementById('setting-default-threads').value = config.defaultThreads;
   document.getElementById('setting-default-encoding').value = config.defaultEncoding || 'copy';
+  document.getElementById('setting-default-encoder').value = config.defaultEncoder || 'software';
   document.getElementById('setting-auto-refresh').value = String(config.autoRefresh);
 }
 
@@ -165,6 +167,9 @@ function setupEventListeners() {
   document.getElementById('setting-default-encoding').addEventListener('change', (e) => {
     config.defaultEncoding = e.target.value || 'copy';
   });
+  document.getElementById('setting-default-encoder').addEventListener('change', (e) => {
+    config.defaultEncoder = e.target.value || 'software';
+  });
   document.getElementById('setting-auto-refresh').addEventListener('change', (e) => {
     config.autoRefresh = parseInt(e.target.value) || 0;
     restartAutoRefresh();
@@ -231,6 +236,7 @@ async function handleAddTask(e) {
     url: document.getElementById('task-url').value.trim(),
     threads: parseInt(document.getElementById('task-threads').value) || config.defaultThreads,
     output_name: document.getElementById('task-output').value.trim() || 'video.mp4',
+    encoder: config.defaultEncoder || 'software',
     output_encoding: document.getElementById('task-output-encoding').value,
     keep_cache: document.getElementById('task-keep-cache').checked,
     queued: document.getElementById('task-queued').checked
@@ -255,6 +261,7 @@ async function handleQuickDownload(url, output, queued = false) {
     url,
     threads: config.defaultThreads || 8,
     output_name: output || 'video.mp4',
+    encoder: config.defaultEncoder || 'software',
     output_encoding: config.defaultEncoding || 'copy',
     keep_cache: false,
     queued
@@ -296,6 +303,7 @@ async function handleSaveSettings(e) {
   config.port = parsed.port;
   config.defaultThreads = parseInt(document.getElementById('setting-default-threads').value) || 8;
   config.defaultEncoding = document.getElementById('setting-default-encoding').value || 'copy';
+  config.defaultEncoder = document.getElementById('setting-default-encoder').value || 'software';
   config.autoRefresh = parseInt(document.getElementById('setting-auto-refresh').value) || 0;
 
   await saveConfig();

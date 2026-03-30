@@ -40,6 +40,9 @@ services:
       - CACHE_DIR=/data/task_cache
       - OUTPUT_DIR=/output
     restart: unless-stopped
+    # 硬件加速支持 (根据实际情况配置)
+    devices:
+      - /dev/dri:/dev/dri # 主要渲染设备
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:6900/health')"]
       interval: 30s
@@ -122,6 +125,7 @@ curl -X POST http://localhost:6900/api/download \
     "url": "https://example.com/video.m3u8",
     "threads": 8,
     "output_name": "my_video.mp4",
+    "encoder": "software",
     "output_encoding": "copy"
   }'
 ```
@@ -162,11 +166,13 @@ done
 ```
 
 ## 注意事项
-
+ 
 1. Docker 镜像已内置 ffmpeg，无需额外安装
-2. 后端服务需要保持运行才能使用 Edge 插件
-3. 默认情况下，下载完成后会清理分片文件，保留元数据
-4. 完整的 API 文档请查看 [API.md](https://github.com/ZZH-Finalize/m3u8-downloader/blob/master/API.md)
+2. Docker 镜像内的编码器组件已全部移除，使用 Docker 镜像后端时，用户只能选择 copy 作为编码方式，copy 是最常用的模式，它直接复制视频流而不重新编码
+3. 如果用户确实需要其他编码方式，可以使用原生部署直接使用宿主机上功能齐全的 ffmpeg，或者自行转码处理 Docker 合并完成的输出文件
+4. 后端服务需要保持运行才能使用 Edge 插件
+5. 默认情况下，下载完成后会清理分片文件，保留元数据
+6. 完整的 API 文档请查看 [API.md](https://github.com/ZZH-Finalize/m3u8-downloader/blob/master/API.md)
 
 ## 相关资源
 

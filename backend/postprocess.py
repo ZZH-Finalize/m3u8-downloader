@@ -1,18 +1,17 @@
 import asyncio, os, shutil
 import config
 
-from models import TaskStatus, OutputEncoding
+from models import TaskStatus, OutputEncoding, Encoder
 from task import DownloadTask
 from logger import get_logger
 from tempfile import NamedTemporaryFile
 
 logger = get_logger(__name__)
 
-encoder_mapping = {
-    OutputEncoding.COPY: 'copy',
-    OutputEncoding.X264: 'libx264',
-    OutputEncoding.X265: 'libx265',
-    OutputEncoding.AV1: 'libaom',
+software_encoder_mapping = {
+    OutputEncoding.H264: 'libx264',
+    OutputEncoding.HEVC: 'libx265',
+    OutputEncoding.AV1: 'libsvtav1',
 }
 
 async def clear_segments(task: DownloadTask):
@@ -37,15 +36,18 @@ async def merge_segments(task: DownloadTask):
 
     logger.debug(f'[{task.id}] 使用临时文件: {f.name}')
 
-    cmd = ['ffmpeg', '-y',
-            '-f', 'concat',
-            '-safe', '0',
-            '-i', f.name,
-            '-c:a', 'copy',
-            '-c:v', encoder_mapping[task.output_encoding],
+    if task.output_encoding == OutputEncoding.COPY:
+        encoder = 'copy'
+    elif task.encoder == Encoder.Software:
+        encoder = software_encoder_mapping[task.output_encoding]
+    else:
+        encoder = f'{task.output_encoding.value}_{task.encoder.value}'
+
+    cmd = ['ffmpeg', '-y', '-f', 'concat',
+            '-safe', '0', '-i', f.name,
+            '-c:a', 'copy', '-c:v', encoder,
             # '-bsf:a', 'aac_adtstoasc',
-            config.server.output_dir / task.output_name
-        ]
+            config.server.output_dir / task.output_name]
     try:
         logger.debug(f'[{task.id}] 启动进程: {cmd}')
         process = await asyncio.create_subprocess_exec(
@@ -55,10 +57,13 @@ async def merge_segments(task: DownloadTask):
         )
         stdout, stderr = await process.communicate()
 
+        logger.debug(stdout.decode('utf-8'))
+
         if process.returncode != 0:
             stderr_str = stderr.decode('utf-8', errors='replace') if stderr else ''
-            logger.error(f'[{task.id}] ffmpeg 执行失败：{stderr_str}')
-            return
+            msg = f'[{task.id}] ffmpeg 执行失败：{stderr_str}'
+            logger.error(msg)
+            raise RuntimeError(msg)
 
         logger.info(f'[{task.id}] ffmpeg 执行完成')
     except Exception as e:

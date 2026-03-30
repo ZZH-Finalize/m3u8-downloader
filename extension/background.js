@@ -63,7 +63,8 @@ async function createTaskViaApi(url, output, queued = false) {
       port: '6900',
       protocol: 'http',
       defaultThreads: 8,
-      defaultEncoding: 'copy'
+      defaultEncoding: 'copy',
+      defaultEncoder: 'software'
     };
 
     const protocol = config.protocol || 'http';
@@ -76,6 +77,7 @@ async function createTaskViaApi(url, output, queued = false) {
         url: url,
         threads: config.defaultThreads || 8,
         output_name: output,
+        encoder: config.defaultEncoder || 'software',
         output_encoding: config.defaultEncoding || 'copy',
         keep_cache: false,
         queued: queued
